@@ -1,0 +1,38 @@
+{
+  "name": "mission-last-light",
+  "version": "1.0.0",
+  "description": "MISSION: LAST LIGHT — Space Mission Engineering Game",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --test tests/budget.test.ts tests/mass.test.ts tests/power.test.ts tests/propellant.test.ts tests/communications.test.ts tests/science.test.ts tests/constraints.test.ts tests/readiness_stress.test.ts tests/ui_components.test.ts tests/simulation_events.test.ts tests/qa_hostile.test.ts"
+  },
+  "dependencies": {
+    "lucide-react": "^0.460.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.169.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^4.3.3",
+    "vite": "^5.4.10"
+  },
+  "keywords": [
+    "nasa",
+    "space-mission",
+    "simulation",
+    "game-engine",
+    "science"
+  ],
+  "author": "NASA Space Apps Challenge 2026",
+  "license": "MIT"
+}
