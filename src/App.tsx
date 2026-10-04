@@ -8,174 +8,2860 @@ import {
   toggleAudio,
 } from './utils/audio.ts';
 
-// Subsystems definition: [name, options: [name, mass, power, cost, dv, reliability, desc]]
-export interface SubsystemOption {
+// ============================================================================
+// SCIENTIFIC & ENGINEERING SUBSYSTEM CATALOG
+// ============================================================================
+export interface ComponentOption {
+  id: string;
   name: string;
-  mass: number;
-  power: number;
-  cost: number;
-  dv: number;
-  rel: number;
+  mass: number;        // kg delta
+  power: number;       // W delta (positive = draw, negative = generation)
+  cost: number;        // $M cost
+  dv: number;          // m/s delta-V contribution
+  rel: number;         // Reliability % delta
+  radTol: number;      // krad tolerance
   desc: string;
+  spec: string;
 }
 
-export interface SubsystemCategoryItem {
-  category: string;
-  options: SubsystemOption[];
+export interface SubsystemCategory {
+  id: string;
+  name: string;
+  icon: string;
+  options: ComponentOption[];
 }
 
-export const C: [string, [string, number, number, number, number, number, string][]][] = [
-  ['Structure', [
-    ['Al Frame', 0, 0, 0, 0, 0, 'Baseline aluminium bus structure'],
-    ['Carbon Truss', -60, 0, 3, 25, 2, 'Lighter, stiffer, higher cost']
-  ]],
-  ['Propulsion', [
-    ['Ion Thruster', 0, 0, 0, 0, 0, 'High specific impulse (Isp 3000s)'],
-    ['Hall Thruster XL', 45, 8, 4, 120, 1, 'Greater thrust, higher power demand']
-  ]],
-  ['Power', [
-    ['Solar Array A', 0, 0, 0, 0, 0, 'Standard 1.8 kW dual wings'],
-    ['Solar Array B', 42, -6, 3, 0, 2, 'High-efficiency expanded gallium wings']
-  ]],
-  ['Comms', [
-    ['Antenna A', 0, 0, 0, 0, 0, '2.4 Mbps X-band horn antenna'],
-    ['Antenna B', 38, 5, 4, 0, 6, '4.8 Mbps high-gain Ka-band dish']
-  ]],
-  ['Science', [
-    ['Camera + Spec', 0, 0, 0, 0, 0, 'High-res multispectral camera'],
-    ['+Radar Sounder', 55, 12, 6, -20, 1, 'Deep subsurface penetration radar']
-  ]],
-  ['Thermal', [
-    ['Passive Radiators', 0, 0, 0, 0, 0, 'Multi-layer insulation louvers'],
-    ['Active Loop', 30, 4, 2, 0, 5, 'Closed-loop pumped fluid system']
-  ]],
-  ['Navigation', [
-    ['Star Tracker', 0, 0, 0, 0, 0, 'Standard stellar inertial tracker'],
-    ['Optical Nav', 12, 2, 2, 0, 3, 'Autonomous optical hazard guidance']
-  ]],
-  ['Computing', [
-    ['Flight CPU', 0, 0, 0, 0, 0, 'Standard COTS redundant flight computer'],
-    ['Rad-Hard CPU', 10, 3, 3, 0, 4, 'Radiation-hardened RAD750 processor']
-  ]]
+export const SUBSYSTEMS: SubsystemCategory[] = [
+  {
+    id: 'structure',
+    name: 'Structure',
+    icon: '🏗️',
+    options: [
+      {
+        id: 'struct_al_frame',
+        name: 'Al-6061 Semi-Monocoque',
+        mass: 0,
+        power: 0,
+        cost: 0,
+        dv: 0,
+        rel: 0,
+        radTol: 30,
+        desc: 'Standard aerospace aluminium truss bus. Rugged baseline.',
+        spec: 'Density 2.7g/cm³ · Modulus 69 GPa'
+      },
+      {
+        id: 'struct_carbon_truss',
+        name: 'Carbon-Composite Truss',
+        mass: -65,
+        power: 0,
+        cost: 4.5,
+        dv: 35,
+        rel: 2,
+        radTol: 45,
+        desc: 'Ultra-light carbon fiber honeycomb bus. Cuts dry mass.',
+        spec: 'Mass -65kg · High thermal stability'
+      },
+      {
+        id: 'struct_whipple_shield',
+        name: 'Whipple Debris Bumper',
+        mass: 42,
+        power: 0,
+        cost: 3.2,
+        dv: -15,
+        rel: 6,
+        radTol: 60,
+        desc: 'Multi-layer hypervelocity shield. Absorbs micrometeoroid hits.',
+        spec: 'Deflects particles up to 12 km/s'
+      }
+    ]
+  },
+  {
+    id: 'propulsion',
+    name: 'Propulsion',
+    icon: '🚀',
+    options: [
+      {
+        id: 'prop_ion_standard',
+        name: 'NSTAR Ion Thruster',
+        mass: 0,
+        power: 0,
+        cost: 0,
+        dv: 0,
+        rel: 0,
+        radTol: 50,
+        desc: 'Electrostatic xenon ion engine. High specific impulse.',
+        spec: 'Isp 3100s · Thrust 92 mN · Pwr 2.1 kW'
+      },
+      {
+        id: 'prop_hall_xl',
+        name: 'Hall Effect Thruster XL',
+        mass: 48,
+        power: 14,
+        cost: 6.2,
+        dv: 140,
+        rel: 1,
+        radTol: 60,
+        desc: 'High-thrust magnetic plasma accelerator for rapid trajectory burns.',
+        spec: 'Isp 2200s · Thrust 240 mN · Fast burns'
+      },
+      {
+        id: 'prop_biprop_mmh',
+        name: 'MMH/NTO Bipropellant',
+        mass: 85,
+        power: -4,
+        cost: 2.8,
+        dv: 80,
+        rel: -2,
+        radTol: 40,
+        desc: 'Chemical bipropellant. Instantaneous impulse, high propellant mass.',
+        spec: 'Isp 320s · Thrust 450 N · Chemical'
+      }
+    ]
+  },
+  {
+    id: 'power',
+    name: 'Power',
+    icon: '⚡',
+    options: [
+      {
+        id: 'pwr_array_a',
+        name: 'Rigid Silicon Panels (1.8 kW)',
+        mass: 0,
+        power: 0,
+        cost: 0,
+        dv: 0,
+        rel: 0,
+        radTol: 35,
+        desc: 'Dual body-hinged silicon solar arrays. Nominal 1 AU baseline.',
+        spec: '1.8 kW @ 1 AU · Efficiency 22%'
+      },
+      {
+        id: 'pwr_array_b',
+        name: 'UltraFlex Circular GaAs (2.4 kW)',
+        mass: 38,
+        power: -8,
+        cost: 4.8,
+        dv: -5,
+        rel: 3,
+        radTol: 65,
+        desc: 'Expanded gallium arsenide solar wings. Sustains power at 1.4 AU.',
+        spec: '2.4 kW @ 1 AU · Efficiency 34%'
+      },
+      {
+        id: 'pwr_mmrtg',
+        name: 'Multi-Mission RTG (Pu-238)',
+        mass: 45,
+        power: -12,
+        cost: 16.5,
+        dv: -15,
+        rel: 7,
+        radTol: 250,
+        desc: 'Radioisotope thermoelectric generator. Constant power anywhere.',
+        spec: '110W constant · 0% solar dependence'
+      }
+    ]
+  },
+  {
+    id: 'comms',
+    name: 'Communications',
+    icon: '📡',
+    options: [
+      {
+        id: 'comm_xband_hga',
+        name: 'X-Band Parabolic HGA (1.2m)',
+        mass: 0,
+        power: 0,
+        cost: 0,
+        dv: 0,
+        rel: 0,
+        radTol: 45,
+        desc: 'Standard deep space transponder for Deep Space Network.',
+        spec: '2.4 Mbps @ 1.2 AU · 8.4 GHz'
+      },
+      {
+        id: 'comm_kaband_xl',
+        name: 'Ka-Band Deep Space Dish (2.2m)',
+        mass: 36,
+        power: 6,
+        cost: 5.2,
+        dv: 0,
+        rel: 5,
+        radTol: 55,
+        desc: 'High-frequency Ka-band dish. Doubles scientific downlink throughput.',
+        spec: '4.8 Mbps @ 1.2 AU · 32 GHz · +6dB margin'
+      },
+      {
+        id: 'comm_optical_laser',
+        name: 'Deep Space Optical Comms (DSOC)',
+        mass: 28,
+        power: 12,
+        cost: 9.8,
+        dv: -8,
+        rel: 3,
+        radTol: 70,
+        desc: 'Pulsed laser downlink. Extremely high bandwidth to Palomar telescope.',
+        spec: '25.0 Mbps @ 1.2 AU · Near-IR laser'
+      }
+    ]
+  },
+  {
+    id: 'science',
+    name: 'Science Payload',
+    icon: '⚗️',
+    options: [
+      {
+        id: 'sci_camera_spec',
+        name: 'PolyCam & IR Spectrometer',
+        mass: 0,
+        power: 0,
+        cost: 0,
+        dv: 0,
+        rel: 0,
+        radTol: 40,
+        desc: 'High-resolution telescopic framing imager and infrared spectrometer.',
+        spec: '1024×1024 CCD · Spectral 0.4–4.0 μm'
+      },
+      {
+        id: 'sci_radar_sounder',
+        name: '+Subsurface Radar Sounder',
+        mass: 55,
+        power: 14,
+        cost: 7.2,
+        dv: -20,
+        rel: 2,
+        radTol: 50,
+        desc: 'Ground-penetrating radar. Maps internal density and porosity voids.',
+        spec: 'VHF 15–25 MHz · Depth 250m'
+      },
+      {
+        id: 'sci_lidar_thermal',
+        name: '+3D LIDAR Altimeter & OTES',
+        mass: 42,
+        power: 10,
+        cost: 6.4,
+        dv: -12,
+        rel: 3,
+        radTol: 55,
+        desc: 'Centimeter-grade scanning laser altimeter for boulder field topography.',
+        spec: '1064 nm Laser · 10 kHz pulse'
+      }
+    ]
+  },
+  {
+    id: 'thermal',
+    name: 'Thermal Control',
+    icon: '🌡️',
+    options: [
+      {
+        id: 'therm_passive_mli',
+        name: 'Passive MLI Blankets & Louvers',
+        mass: 0,
+        power: 0,
+        cost: 0,
+        dv: 0,
+        rel: 0,
+        radTol: 35,
+        desc: 'Multi-layer Kapton/Mylar insulation with bimetallic louvers.',
+        spec: 'Effective emissivity ε* 0.02 · Passive'
+      },
+      {
+        id: 'therm_active_loop',
+        name: 'Pumped Fluid Heatpipe Loop',
+        mass: 32,
+        power: 5,
+        cost: 3.4,
+        dv: 0,
+        rel: 6,
+        radTol: 60,
+        desc: 'Mechanically pumped ammonia cooling loop. Withstands solar storm peaks.',
+        spec: 'Heat rejection 850W · Active PID control'
+      },
+      {
+        id: 'therm_aerogel_rhu',
+        name: 'Aerogel & Radioisotope Heaters',
+        mass: 22,
+        power: -2,
+        cost: 5.6,
+        dv: 0,
+        rel: 8,
+        radTol: 90,
+        desc: 'Solid silica aerogel insulation with Pu-238 heat pellets.',
+        spec: 'Maintains > -20°C in eclipse shadow'
+      }
+    ]
+  },
+  {
+    id: 'navigation',
+    name: 'Guidance & Nav',
+    icon: '🧭',
+    options: [
+      {
+        id: 'nav_star_tracker',
+        name: 'Dual Autonomous Star Trackers',
+        mass: 0,
+        power: 0,
+        cost: 0,
+        dv: 0,
+        rel: 0,
+        radTol: 45,
+        desc: 'Inertial stellar reference attitude control with gyroscopes.',
+        spec: 'Arcsecond pointing precision · 10 Hz'
+      },
+      {
+        id: 'nav_opnav_terrain',
+        name: 'Optical Nav & Hazard Detection',
+        mass: 14,
+        power: 3,
+        cost: 2.6,
+        dv: 0,
+        rel: 4,
+        radTol: 55,
+        desc: 'Autonomous vision algorithm for asteroid limb detection and approach.',
+        spec: 'Autonomous miss-distance correction'
+      },
+      {
+        id: 'nav_atomic_clock',
+        name: 'Deep Space Atomic Clock (DSAC)',
+        mass: 18,
+        power: 6,
+        cost: 5.8,
+        dv: 10,
+        rel: 5,
+        radTol: 80,
+        desc: 'Mercury-ion atomic clock for onboard autonomous 1-way navigation.',
+        spec: 'Stability < 10⁻¹⁵ · Real-time orbit fix'
+      }
+    ]
+  },
+  {
+    id: 'computing',
+    name: 'Flight Computing',
+    icon: '💻',
+    options: [
+      {
+        id: 'comp_flight_cpu',
+        name: 'Dual Redundant COTS Flight CPU',
+        mass: 0,
+        power: 0,
+        cost: 0,
+        dv: 0,
+        rel: 0,
+        radTol: 30,
+        desc: 'Commercial ARM processor with software voting. Cost-effective.',
+        spec: '800 MHz · Single Event Upset risk in CME'
+      },
+      {
+        id: 'comp_rad_hard',
+        name: 'RAD750 Radiation-Hardened CPU',
+        mass: 12,
+        power: 4,
+        cost: 4.2,
+        dv: 0,
+        rel: 5,
+        radTol: 120,
+        desc: 'NASA standard silicon-on-insulator rad-hard processor. Storm immune.',
+        spec: '133 MHz · Immune to Single Event Latchup'
+      },
+      {
+        id: 'comp_tri_redundant',
+        name: 'Triple-Modular Redundant LEON4',
+        mass: 20,
+        power: 7,
+        cost: 7.5,
+        dv: 0,
+        rel: 8,
+        radTol: 180,
+        desc: 'Fault-tolerant quad-core SPARC with hardware majority voting.',
+        spec: 'Full autonomous anomaly self-healing'
+      }
+    ]
+  }
 ];
 
-export interface SubsystemTotals {
-  m: number;
-  p: number;
-  b: number;
-  d: number;
-  r: number;
+// Helper to compute spacecraft totals
+export interface CraftTotals {
+  massKg: number;
+  powerW: number;
+  costM: number;
+  dvMs: number;
+  reliabilityPct: number;
+  radTolKrad: number;
+  budgetRemainingM: number;
+  isMassValid: boolean;
+  isBudgetValid: boolean;
+  isPowerValid: boolean;
+  isDvValid: boolean;
+  isFlightReady: boolean;
 }
 
-export const tot = (inst: Record<number, number>): SubsystemTotals => {
-  let m = 2430;
-  let p = 62;
-  let b = 42;
-  let d = 1450;
-  let r = 82;
+export function computeCraftTotals(selection: Record<number, number>): CraftTotals {
+  let massKg = 2430;
+  let powerW = 62;
+  let costSpentM = 36.5;
+  let dvMs = 1450;
+  let reliabilityPct = 84;
+  let radTolKrad = 45;
 
-  C.forEach(([, o], i) => {
-    const x = o[inst[i] || 0];
-    m += x[1];
-    p += x[2];
-    b -= x[3];
-    d += x[4];
-    r += x[5];
+  SUBSYSTEMS.forEach((sub, i) => {
+    const optIndex = selection[i] || 0;
+    const opt = sub.options[optIndex] || sub.options[0];
+    massKg += opt.mass;
+    powerW += opt.power;
+    costSpentM += opt.cost;
+    dvMs += opt.dv;
+    reliabilityPct += opt.rel;
+    radTolKrad = Math.max(radTolKrad, opt.radTol);
   });
 
-  if (m > 2500) r -= 8;
-  if (b < 0) r -= 8;
-  if (p > 100) r -= 8;
+  const budgetTotalM = 50.0;
+  const budgetRemainingM = Math.max(0, +(budgetTotalM - costSpentM).toFixed(1));
 
-  return { m, p, b, d, r: Math.max(30, Math.min(99, r)) };
-};
+  // Engineering Penalties
+  if (massKg > 2500) reliabilityPct -= 8;
+  if (costSpentM > 50) reliabilityPct -= 12;
+  if (powerW > 100) reliabilityPct -= 10;
+  if (dvMs < 1200) reliabilityPct -= 10;
 
-export interface GameState {
-  page: number;
-  inst: Record<number, number>;
-  mode: 'COMMANDER' | 'ENGINEER';
-  day: number;
-  speed: number;
-  fuel: number;
-  health: number;
-  data: number;
-  sci: number;
-  ret: number;
-  pw: { science: number; comms: number; computing: number; thermal: number };
-  pri: { s: number; v: number; a: number };
-  safe: boolean;
-  stormDone: boolean;
-  stormChoice: 'safe' | 'sci' | 'power' | null;
-  surveys: number;
-  tx: number;
-  toast: string | null;
-  flash: Record<string, number> | null;
-  tab: number;
-  cmp: number | null;
-  mtab: number;
-  hit: number;
-  how: boolean;
+  reliabilityPct = Math.max(25, Math.min(99, reliabilityPct));
+
+  const isMassValid = massKg <= 2500;
+  const isBudgetValid = costSpentM <= 50;
+  const isPowerValid = powerW <= 100;
+  const isDvValid = dvMs >= 1200;
+  const isFlightReady = isMassValid && isBudgetValid && isPowerValid && isDvValid;
+
+  return {
+    massKg,
+    powerW,
+    costM: +costSpentM.toFixed(1),
+    dvMs,
+    reliabilityPct,
+    radTolKrad,
+    budgetRemainingM,
+    isMassValid,
+    isBudgetValid,
+    isPowerValid,
+    isDvValid,
+    isFlightReady,
+  };
 }
 
-export const init: GameState = {
-  page: 1,
-  inst: {},
+// ============================================================================
+// GAME STATE DEFINITIONS
+// ============================================================================
+export type ScreenId =
+  | 'landing'
+  | 'how'
+  | 'brief'
+  | 'priorities'
+  | 'design'
+  | 'ready'
+  | 'stress'
+  | 'launch'
+  | 'flight'
+  | 'rock'
+  | 'debrief'
+  | 'board'
+  | 'nasa';
+
+export type FlightDockTab = 'maneuver' | 'power' | 'comms' | 'science' | null;
+
+export interface InFlightCrisis {
+  id: string;
+  day: number;
+  title: string;
+  headline: string;
+  desc: string;
+  options: {
+    label: string;
+    action: 'safe' | 'counter' | 'push';
+    desc: string;
+  }[];
+}
+
+export interface GameState {
+  screen: ScreenId;
+  selection: Record<number, number>; // Subsystem index -> Component option index
+  mode: 'COMMANDER' | 'ENGINEER';
+  priorities: { science: number; survivability: number; affordability: number };
+
+  // Flight Simulation State
+  day: number;
+  timeSpeed: number; // 0 (paused), 1, 5, 20, 100
+  fuelKg: number;
+  fuelMaxKg: number;
+  healthPct: number;
+  dataBufferGb: number;
+  dataBufferMaxGb: number;
+  dataReturnedGb: number;
+  sciencePoints: number;
+  missDistanceKm: number;
+  powerAlloc: { science: number; comms: number; computing: number; thermal: number };
+  safeMode: boolean;
+  busTempC: number;
+  batteryPct: number;
+
+  // Maneuvers executed
+  maneuversDone: { tcm1: boolean; tcm2: boolean; rdvz: boolean };
+
+  // Hazard event resolutions
+  resolvedEvents: { id: string; choice: string; impact: string }[];
+  activeCrisis: InFlightCrisis | null;
+
+  // Active UI Sheet / Overlays
+  activeDockTab: FlightDockTab;
+  compareSubsystemIndex: number | null;
+  compareOptionIndex: number | null;
+  toastMessage: string | null;
+  flashBadge: Record<string, number> | null;
+  surveysDone: number;
+  downlinksDone: number;
+}
+
+export const INITIAL_GAME_STATE: GameState = {
+  screen: 'landing',
+  selection: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 },
   mode: 'COMMANDER',
+  priorities: { science: 1, survivability: 1, affordability: 1 },
+
   day: 1,
-  speed: 1,
-  fuel: 85,
-  health: 100,
-  data: 18.4,
-  sci: 0,
-  ret: 0,
-  pw: { science: 30, comms: 25, computing: 25, thermal: 20 },
-  pri: { s: 1, v: 1, a: 1 },
-  safe: false,
-  stormDone: false,
-  stormChoice: null,
-  surveys: 0,
-  tx: 0,
-  toast: null,
-  flash: null,
-  tab: 0,
-  cmp: null,
-  mtab: 0,
-  hit: 0,
-  how: false,
+  timeSpeed: 1,
+  fuelKg: 1250,
+  fuelMaxKg: 1250,
+  healthPct: 100,
+  dataBufferGb: 4.2,
+  dataBufferMaxGb: 32.0,
+  dataReturnedGb: 0,
+  sciencePoints: 0,
+  missDistanceKm: 42000,
+  powerAlloc: { science: 30, comms: 25, computing: 25, thermal: 20 },
+  safeMode: false,
+  busTempC: 18.5,
+  batteryPct: 100,
+
+  maneuversDone: { tcm1: false, tcm2: false, rdvz: false },
+  resolvedEvents: [],
+  activeCrisis: null,
+
+  activeDockTab: null,
+  compareSubsystemIndex: null,
+  compareOptionIndex: null,
+  toastMessage: null,
+  flashBadge: null,
+  surveysDone: 0,
+  downlinksDone: 0,
 };
 
-// UI Primitives
-export const Btn: React.FC<{
-  children: React.ReactNode;
-  onClick?: () => void;
-  p?: boolean | number;
-  dis?: boolean;
-  why?: string;
-  set: (updater: Partial<GameState> | ((prev: GameState) => GameState)) => void;
-  className?: string;
-}> = ({ children, onClick, p, dis, why, set, className = '' }) => (
-  <button
-    type="button"
-    className={`btn ${p ? 'p ' : ''}${dis ? 'off ' : ''}${className}`}
-    onClick={() => {
-      if (dis) {
-        if (why) set({ toast: why });
-      } else {
-        playTelemetryClick();
-        if (onClick) onClick();
+// ============================================================================
+// STRESS TEST SCENARIOS
+// ============================================================================
+export const STRESS_HAZARDS = [
+  { name: 'Coronal Mass Ejection', sub: 'computing', penalty: 32, label: 'Solar Storm' },
+  { name: 'Hypervelocity Micrometeoroid', sub: 'structure', penalty: 28, label: 'Micrometeoroid' },
+  { name: 'Deep Space Thermal Soak', sub: 'thermal', penalty: 24, label: 'Thermal Soak' },
+  { name: 'DSN Carrier Frequency Desync', sub: 'comms', penalty: 20, label: 'Comms Blackout' },
+  { name: 'Van Allen Radiation Belt', sub: 'computing', penalty: 22, label: 'Radiation Belt' },
+  { name: 'Solar Array Voltage Dip', sub: 'power', penalty: 18, label: 'Power Grid Dip' },
+  { name: 'Asteroid Dust Cloud Abrasion', sub: 'structure', penalty: 16, label: 'Dust Cloud' },
+  { name: 'Planetary Eclipse Shadow', sub: 'power', penalty: 14, label: 'Eclipse Shadow' },
+];
+
+// ============================================================================
+// IN-FLIGHT CRISIS EVENTS
+// ============================================================================
+export const MISSION_CRISES: InFlightCrisis[] = [
+  {
+    id: 'evt_micrometeoroid',
+    day: 42,
+    title: 'MICROMETEOROID SHOWER DETECTED',
+    headline: 'High-density dust debris stream intersecting spacecraft flight path.',
+    desc: 'Optical sensors report high-velocity micrometeoroid impacts along the forward bus.',
+    options: [
+      {
+        label: 'Slew Behind Engine Block',
+        action: 'counter',
+        desc: 'Burn 35 kg propellant to turn main engine bell into forward shield.'
+      },
+      {
+        label: 'Enter Autonomous Safe Mode',
+        action: 'safe',
+        desc: 'Fold solar arrays edge-on and minimize cross-sectional area.'
+      },
+      {
+        label: 'Rely on Bus Hull Integrity',
+        action: 'push',
+        desc: 'Maintain flight attitude. Unshielded buses will take impact damage.'
       }
-    }}
-  >
-    {children}
-  </button>
+    ]
+  },
+  {
+    id: 'evt_solar_storm',
+    day: 88,
+    title: 'HIGH ALERT: SEVERE CORONAL MASS EJECTION',
+    headline: 'Major X-Class solar flare detected. High-energy proton flux rising rapidly.',
+    desc: 'Intense proton radiation wave incoming. Can latch up flight computers and fry uncooled electronics.',
+    options: [
+      {
+        label: 'Reboot to Rad-Safe Kernel',
+        action: 'safe',
+        desc: 'Protect avionics in safe mode. Science paused for 48 hours.'
+      },
+      {
+        label: 'Route Peak Power to Thermal Loop',
+        action: 'counter',
+        desc: 'Overdrive pumped coolant to dissipate thermal radiative spikes.'
+      },
+      {
+        label: 'Continue Science Observations',
+        action: 'push',
+        desc: 'Capture unprecedented CME solar science, risking major hardware damage.'
+      }
+    ]
+  },
+  {
+    id: 'evt_reaction_wheel',
+    day: 116,
+    title: 'ATTITUDE CONTROL REACTION WHEEL JITTER',
+    headline: 'Flywheel 3 exhibiting high bearing friction and angular telemetry drift.',
+    desc: 'Uncompensated vibration will blur high-resolution asteroid reconnaissance images.',
+    options: [
+      {
+        label: 'Switch to RCS Thruster Guidance',
+        action: 'counter',
+        desc: 'Expend 20 kg propellant to stabilize spacecraft using hydrazine thrusters.'
+      },
+      {
+        label: 'Desaturate via Magnetic Torquers',
+        action: 'safe',
+        desc: 'Throttle survey imaging rate to allow slow flywheel desaturation.'
+      },
+      {
+        label: 'Ignore & Push Target Scans',
+        action: 'push',
+        desc: 'Take images immediately despite optical blurring.'
+      }
+    ]
+  }
+];
+
+// ============================================================================
+// MAIN GAME COMPONENT
+// ============================================================================
+export const App: React.FC = () => {
+  const [g, setG] = useState<GameState>(INITIAL_GAME_STATE);
+  const updateG = (updater: Partial<GameState> | ((prev: GameState) => GameState)) => {
+    setG((prev) => ({ ...prev, ...(typeof updater === 'function' ? updater(prev) : updater) }));
+  };
+
+  const totals = useMemo(() => computeCraftTotals(g.selection), [g.selection]);
+
+  // Viewport & Audio state
+  const [isPhoneFrame, setIsPhoneFrame] = useState(true);
+  const [scaleFactor, setScaleFactor] = useState(1);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [muted, setMuted] = useState(isAudioMuted());
+
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobile = window.innerWidth <= 600;
+      setIsMobileDevice(isMobile);
+      if (isMobile) {
+        setIsPhoneFrame(false);
+        setScaleFactor(1);
+      } else {
+        const sc = Math.min(1, (window.innerHeight - 60) / 852, (window.innerWidth - 40) / 393);
+        setScaleFactor(sc);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Toast message auto-dismiss
+  useEffect(() => {
+    if (g.toastMessage) {
+      const t = setTimeout(() => updateG({ toastMessage: null }), 2800);
+      return () => clearTimeout(t);
+    }
+  }, [g.toastMessage]);
+
+  // Flash badge auto-dismiss
+  useEffect(() => {
+    if (g.flashBadge) {
+      const t = setTimeout(() => updateG({ flashBadge: null }), 1600);
+      return () => clearTimeout(t);
+    }
+  }, [g.flashBadge]);
+
+  // ==========================================================================
+  // CORE FLIGHT SIMULATION LOOP
+  // ==========================================================================
+  useEffect(() => {
+    if (g.screen !== 'flight' || g.timeSpeed === 0 || g.activeCrisis) return;
+
+    const intervalTime = Math.max(50, 600 / g.timeSpeed);
+    const interval = setInterval(() => {
+      setG((prev) => {
+        if (prev.screen !== 'flight' || prev.timeSpeed === 0 || prev.activeCrisis) return prev;
+
+        const nextDay = prev.day + 1;
+
+        // Check for crisis events
+        const crisis = MISSION_CRISES.find(
+          (c) => c.day === nextDay && !prev.resolvedEvents.some((r) => r.id === c.id)
+        );
+        if (crisis) {
+          playWarningAlert();
+          return {
+            ...prev,
+            day: nextDay,
+            activeCrisis: crisis,
+            toastMessage: `CRISIS ALERT: ${crisis.title}`,
+          };
+        }
+
+        // Check for Mission Conclusion (Day 146)
+        if (nextDay >= 146 || prev.healthPct <= 0) {
+          playSuccessChime();
+          // Save record to local storage
+          try {
+            const history = JSON.parse(localStorage.getItem('last_light_records') || '[]');
+            history.unshift({
+              score: prev.sciencePoints * 10 + Math.round(prev.dataReturnedGb * 20),
+              sci: prev.sciencePoints,
+              data: prev.dataReturnedGb,
+              health: Math.round(prev.healthPct),
+              cost: totals.costM,
+              success: prev.healthPct >= 35 && prev.sciencePoints >= 50,
+              date: new Date().toLocaleDateString(),
+            });
+            localStorage.setItem('last_light_records', JSON.stringify(history.slice(0, 20)));
+          } catch {
+            // Ignore storage errors
+          }
+
+          return {
+            ...prev,
+            day: 146,
+            screen: 'debrief',
+            toastMessage: 'MISSION COMPLETED: Entering debrief analysis.',
+          };
+        }
+
+        // Distance to Sun (AU) scaling from 1.0 to 1.25 AU
+        const sunDist = 1.0 + (nextDay / 146) * 0.25;
+        const solarIntensity = 1 / (sunDist * sunDist);
+        const solarGenW = (100 - totals.powerW * 0.4) * solarIntensity;
+
+        // Net power balance
+        const activePowerDrawW =
+          (prev.powerAlloc.science * 0.4 +
+            prev.powerAlloc.comms * 0.35 +
+            prev.powerAlloc.computing * 0.25 +
+            prev.powerAlloc.thermal * 0.3) *
+          (prev.safeMode ? 0.35 : 1.0);
+
+        const netW = solarGenW - activePowerDrawW;
+        let newBattery = prev.batteryPct;
+        if (netW < 0) {
+          newBattery = Math.max(0, prev.batteryPct - 0.4);
+        } else {
+          newBattery = Math.min(100, prev.batteryPct + 0.6);
+        }
+
+        // Thermal calculations
+        let newTemp = prev.busTempC;
+        if (prev.powerAlloc.thermal < 15) {
+          newTemp = Math.max(-45, prev.busTempC - 0.5); // Freezing
+        } else if (prev.powerAlloc.thermal > 45) {
+          newTemp = Math.min(75, prev.busTempC + 0.6);  // Overheating
+        } else {
+          newTemp = prev.busTempC + (20 - prev.busTempC) * 0.08; // Normalizing
+        }
+
+        // Passive science collection
+        let newBuffer = prev.dataBufferGb;
+        let newSci = prev.sciencePoints;
+        let newHealth = prev.healthPct;
+
+        if (!prev.safeMode && prev.powerAlloc.science >= 20 && newBattery > 10) {
+          newBuffer = Math.min(prev.dataBufferMaxGb, prev.dataBufferGb + 0.08);
+          newSci += 0.15;
+        }
+
+        // Battery brownout damage
+        if (newBattery <= 0) {
+          newHealth = Math.max(0, newHealth - 0.5);
+        }
+
+        // Thermal extreme damage
+        if (newTemp < -30 || newTemp > 60) {
+          newHealth = Math.max(0, newHealth - 0.3);
+        }
+
+        return {
+          ...prev,
+          day: nextDay,
+          batteryPct: newBattery,
+          busTempC: +newTemp.toFixed(1),
+          dataBufferGb: +newBuffer.toFixed(2),
+          sciencePoints: +newSci.toFixed(1),
+          healthPct: +newHealth.toFixed(1),
+        };
+      });
+    }, intervalTime);
+
+    return () => clearInterval(interval);
+  }, [g.screen, g.timeSpeed, g.activeCrisis, totals]);
+
+  // ==========================================================================
+  // GAMEPLAY ACTION HANDLERS
+  // ==========================================================================
+  const triggerToast = (msg: string) => updateG({ toastMessage: msg });
+
+  const handleSelectComponent = (subIndex: number, optIndex: number) => {
+    playSuccessChime();
+    const oldOpt = SUBSYSTEMS[subIndex].options[g.selection[subIndex] || 0];
+    const newOpt = SUBSYSTEMS[subIndex].options[optIndex];
+
+    updateG((prev) => ({
+      selection: { ...prev.selection, [subIndex]: optIndex },
+      compareSubsystemIndex: null,
+      compareOptionIndex: null,
+      flashBadge: {
+        Mass: newOpt.mass - oldOpt.mass,
+        Power: newOpt.power - oldOpt.power,
+        Cost: newOpt.cost - oldOpt.cost,
+        'Δv': newOpt.dv - oldOpt.dv,
+      },
+    }));
+  };
+
+  const handleExecuteManeuver = (type: 'tcm1' | 'tcm2' | 'rdvz') => {
+    if (g.fuelKg < 60) {
+      triggerToast('INSUFFICIENT PROPELLANT FOR BURN');
+      return;
+    }
+
+    playThrusterPulse();
+    const fuelBurn = type === 'tcm1' ? 75 : type === 'tcm2' ? 95 : 140;
+    const missReduction = type === 'tcm1' ? 24000 : type === 'tcm2' ? 12000 : 5700;
+
+    updateG((prev) => ({
+      fuelKg: Math.max(0, prev.fuelKg - fuelBurn),
+      missDistanceKm: Math.max(80, prev.missDistanceKm - missReduction),
+      maneuversDone: { ...prev.maneuversDone, [type]: true },
+      toastMessage: `BURN COMPLETE: Miss distance reduced by ${missReduction.toLocaleString()} km!`,
+    }));
+  };
+
+  const handleExecuteScan = (instrument: string, costW: number, gainSci: number, gainGb: number) => {
+    if (g.safeMode) {
+      triggerToast('SAFE MODE ACTIVE: Instruments offline');
+      return;
+    }
+    if (g.dataBufferGb + gainGb > g.dataBufferMaxGb) {
+      triggerToast('DATA BUFFER FULL: Downlink to Earth first');
+      return;
+    }
+    if (g.batteryPct < 15) {
+      triggerToast('LOW BATTERY: Insufficient power for scan');
+      return;
+    }
+
+    playTelemetryClick();
+    setTimeout(playSuccessChime, 600);
+
+    updateG((prev) => ({
+      sciencePoints: +(prev.sciencePoints + gainSci).toFixed(1),
+      dataBufferGb: +(prev.dataBufferGb + gainGb).toFixed(2),
+      batteryPct: Math.max(0, prev.batteryPct - costW * 0.4),
+      toastMessage: `SCAN SUCCESS (${instrument}): +${gainSci} Science, +${gainGb} GB`,
+    }));
+  };
+
+  const handleDownlinkData = () => {
+    const isDsnWindow = g.day % 30 < 22; // Open 22 out of 30 days
+    if (!isDsnWindow) {
+      triggerToast('NO DSN TRACKING WINDOW: Station out of line-of-sight');
+      return;
+    }
+    if (g.dataBufferGb <= 0.1) {
+      triggerToast('DATA BUFFER EMPTY: Nothing to downlink');
+      return;
+    }
+
+    playTelemetryClick();
+    const amt = g.dataBufferGb;
+
+    // Simulate animated transmission
+    setTimeout(() => {
+      playSuccessChime();
+      updateG((prev) => ({
+        dataReturnedGb: +(prev.dataReturnedGb + amt).toFixed(2),
+        dataBufferGb: 0,
+        downlinksDone: prev.downlinksDone + 1,
+        toastMessage: `DOWNLINK SUCCESS: +${amt.toFixed(1)} GB streamed to Deep Space Network!`,
+      }));
+    }, 800);
+  };
+
+  const handleResolveCrisis = (crisisId: string, choice: 'safe' | 'counter' | 'push') => {
+    playTelemetryClick();
+    let healthImpact = 0;
+    let fuelImpact = 0;
+    let sciImpact = 0;
+    let summary = '';
+
+    if (crisisId === 'evt_solar_storm') {
+      const isRadHard = (g.selection[7] || 0) > 0; // Rad-Hard CPU installed
+      const hasActiveThermal = (g.selection[5] || 0) > 0;
+
+      if (choice === 'safe') {
+        summary = 'Autonomous Safe Mode engaged. Bus fully protected, science paused.';
+        healthImpact = isRadHard ? -2 : -6;
+      } else if (choice === 'counter') {
+        summary = 'Overdrove thermal pumped coolant to dump solar radiative spike.';
+        healthImpact = hasActiveThermal ? -4 : -16;
+      } else {
+        summary = 'Pushed science instruments through CME flux. Gathered exotic solar data!';
+        healthImpact = isRadHard ? -14 : -38;
+        sciImpact = 24;
+      }
+    } else if (crisisId === 'evt_micrometeoroid') {
+      const hasWhipple = (g.selection[0] || 0) === 2;
+      if (choice === 'counter') {
+        summary = 'Slewed spacecraft bus behind rocket engine bell.';
+        fuelImpact = 35;
+      } else if (choice === 'safe') {
+        summary = 'Folded solar panels edge-on.';
+        healthImpact = hasWhipple ? -3 : -12;
+      } else {
+        summary = 'Maintained standard orientation in debris field.';
+        healthImpact = hasWhipple ? -5 : -28;
+      }
+    } else {
+      // Reaction wheel
+      if (choice === 'counter') {
+        summary = 'Hydrazine thrusters compensated flywheel jitter.';
+        fuelImpact = 20;
+      } else if (choice === 'safe') {
+        summary = 'Desaturated flywheels gradually. Avoided thruster propellant burn.';
+        sciImpact = -5;
+      } else {
+        summary = 'Target imaging blurry due to flywheel jitter.';
+        sciImpact = 8;
+        healthImpact = -8;
+      }
+    }
+
+    if (healthImpact < -15) {
+      playWarningAlert();
+    } else {
+      playSuccessChime();
+    }
+
+    updateG((prev) => ({
+      healthPct: Math.max(0, +(prev.healthPct + healthImpact).toFixed(1)),
+      fuelKg: Math.max(0, prev.fuelKg - fuelImpact),
+      sciencePoints: Math.max(0, +(prev.sciencePoints + sciImpact).toFixed(1)),
+      resolvedEvents: [
+        ...prev.resolvedEvents,
+        { id: crisisId, choice, impact: summary },
+      ],
+      activeCrisis: null,
+      toastMessage: summary,
+    }));
+  };
+
+  // ==========================================================================
+  // RENDER APP SHELL & SCREENS
+  // ==========================================================================
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen min-h-[100dvh] bg-[#05070c] text-[#F3F6FA] select-none overflow-hidden">
+      {/* Desktop App Control Bar */}
+      {!isMobileDevice && (
+        <header className="mb-2 flex items-center gap-3 z-50 text-xs mono">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#151B26] border border-[#293342]">
+            <span className="h-2 w-2 rounded-full bg-[#00E676] animate-pulse" />
+            <span className="font-bold text-[#00E5FF]">MISSION: LAST LIGHT</span>
+          </div>
+
+          <button
+            type="button"
+            className="px-3 py-1 rounded-full bg-[#151B26] border border-[#293342] text-[#AAB4C3] hover:text-white cursor-pointer transition-colors"
+            onClick={() => {
+              const nextMuted = toggleAudio();
+              setMuted(nextMuted);
+            }}
+          >
+            {muted ? '🔇 MUTED' : '🔊 AUDIO ON'}
+          </button>
+
+          <button
+            type="button"
+            className="px-3 py-1 rounded-full bg-[#151B26] border border-[#293342] text-[#AAB4C3] hover:text-white cursor-pointer transition-colors"
+            onClick={() => setIsPhoneFrame(!isPhoneFrame)}
+          >
+            {isPhoneFrame ? '📱 PHONE FRAME' : '🖥️ FULLSCREEN'}
+          </button>
+        </header>
+      )}
+
+      {/* Mobile Device Frame Container */}
+      <main
+        style={
+          isPhoneFrame
+            ? { width: 393 * scaleFactor, height: 852 * scaleFactor }
+            : { width: '100%', height: '100dvh', maxWidth: '480px' }
+        }
+        className="transition-all duration-300"
+      >
+        <div
+          className={`relative overflow-hidden w-full h-full flex flex-col ${
+            isPhoneFrame
+              ? 'rounded-[38px] border border-[#293342] shadow-[0_0_80px_#00e5ff22]'
+              : ''
+          }`}
+          style={
+            isPhoneFrame
+              ? {
+                  width: 393,
+                  height: 852,
+                  background: 'linear-gradient(#080B12, #0D111A)',
+                  transform: `scale(${scaleFactor})`,
+                  transformOrigin: 'top center',
+                }
+              : { background: 'linear-gradient(#080B12, #0D111A)' }
+          }
+        >
+          {/* Top Mobile Status Header (Safe Area) */}
+          <div className="flex-none pt-3 px-5 flex justify-between items-center text-[10px] mono text-[#AAB4C3] z-30">
+            <span className="font-semibold text-white">NASA 12:00</span>
+            {isPhoneFrame && (
+              <div className="h-4 w-24 bg-[#05070C] rounded-full mx-auto" />
+            )}
+            <div className="flex items-center gap-1.5 text-[#00E5FF]">
+              <span>5G</span>
+              <span className="font-bold">■■■</span>
+            </div>
+          </div>
+
+          {/* Active Screen View */}
+          <div className="flex-1 relative overflow-hidden flex flex-col">
+            {g.screen === 'landing' && (
+              <ScreenLanding
+                onStart={() => updateG({ screen: 'brief' })}
+                onHow={() => updateG({ screen: 'how' })}
+                onNasa={() => updateG({ screen: 'nasa' })}
+                onRecords={() => updateG({ screen: 'board' })}
+              />
+            )}
+
+            {g.screen === 'how' && (
+              <ScreenHowToPlay
+                onStart={() => updateG({ screen: 'brief' })}
+                onBack={() => updateG({ screen: 'landing' })}
+              />
+            )}
+
+            {g.screen === 'brief' && (
+              <ScreenBriefing
+                onAccept={() => updateG({ screen: 'priorities' })}
+                onBack={() => updateG({ screen: 'landing' })}
+              />
+            )}
+
+            {g.screen === 'priorities' && (
+              <ScreenPriorities
+                priorities={g.priorities}
+                onUpdate={(p) => updateG({ priorities: p })}
+                onNext={() => updateG({ screen: 'design' })}
+                onBack={() => updateG({ screen: 'brief' })}
+              />
+            )}
+
+            {g.screen === 'design' && (
+              <ScreenDesignStudio
+                selection={g.selection}
+                totals={totals}
+                onSelectComponent={handleSelectComponent}
+                onNext={() => updateG({ screen: 'ready' })}
+                onBack={() => updateG({ screen: 'priorities' })}
+                onOpenCompare={(subIdx, optIdx) =>
+                  updateG({ compareSubsystemIndex: subIdx, compareOptionIndex: optIdx })
+                }
+              />
+            )}
+
+            {g.screen === 'ready' && (
+              <ScreenReadiness
+                mode={g.mode}
+                totals={totals}
+                onToggleMode={() =>
+                  updateG({ mode: g.mode === 'COMMANDER' ? 'ENGINEER' : 'COMMANDER' })
+                }
+                onNext={() => updateG({ screen: 'stress' })}
+                onBack={() => updateG({ screen: 'design' })}
+              />
+            )}
+
+            {g.screen === 'stress' && (
+              <ScreenStressTest
+                totals={totals}
+                selection={g.selection}
+                onLaunch={() => updateG({ screen: 'launch' })}
+                onRedesign={() => updateG({ screen: 'design' })}
+              />
+            )}
+
+            {g.screen === 'launch' && (
+              <ScreenLaunchCountdown
+                totals={totals}
+                onIgnitionComplete={() =>
+                  updateG({ screen: 'flight', day: 1, timeSpeed: 1 })
+                }
+              />
+            )}
+
+            {g.screen === 'flight' && (
+              <ScreenFlightSim
+                g={g}
+                totals={totals}
+                updateG={updateG}
+                onExecuteManeuver={handleExecuteManeuver}
+                onExecuteScan={handleExecuteScan}
+                onDownlink={handleDownlinkData}
+                onOpenRock={() => updateG({ screen: 'rock' })}
+              />
+            )}
+
+            {g.screen === 'rock' && (
+              <ScreenAsteroidSurvey
+                g={g}
+                updateG={updateG}
+                onBack={() => updateG({ screen: 'flight' })}
+              />
+            )}
+
+            {g.screen === 'debrief' && (
+              <ScreenDebrief
+                g={g}
+                totals={totals}
+                onRetry={() => updateG({ ...INITIAL_GAME_STATE, screen: 'design' })}
+                onHome={() => updateG({ ...INITIAL_GAME_STATE, screen: 'landing' })}
+                onLeaderboard={() => updateG({ screen: 'board' })}
+              />
+            )}
+
+            {g.screen === 'board' && (
+              <ScreenLeaderboard onBack={() => updateG({ screen: 'landing' })} />
+            )}
+
+            {g.screen === 'nasa' && (
+              <ScreenNasaDossier onBack={() => updateG({ screen: 'landing' })} />
+            )}
+          </div>
+
+          {/* Compare Sheet Overlay */}
+          {g.compareSubsystemIndex !== null && g.compareOptionIndex !== null && (
+            <ComponentCompareSheet
+              subIndex={g.compareSubsystemIndex}
+              candidateIndex={g.compareOptionIndex}
+              installedIndex={g.selection[g.compareSubsystemIndex] || 0}
+              onInstall={() =>
+                handleSelectComponent(g.compareSubsystemIndex!, g.compareOptionIndex!)
+              }
+              onClose={() =>
+                updateG({ compareSubsystemIndex: null, compareOptionIndex: null })
+              }
+            />
+          )}
+
+          {/* Active Flight Crisis Modal */}
+          {g.activeCrisis && (
+            <CrisisTriageModal
+              crisis={g.activeCrisis}
+              onResolve={(choice) => handleResolveCrisis(g.activeCrisis!.id, choice)}
+            />
+          )}
+
+          {/* Safe Mode Active Caution Banner */}
+          {g.safeMode && (
+            <div
+              className="pointer-events-none absolute inset-0 z-40"
+              style={{
+                background:
+                  'repeating-linear-gradient(0deg, #ffab0020 0 2px, transparent 2px 6px), #ffab0012',
+                boxShadow: 'inset 0 0 60px #FFAB0066',
+              }}
+            >
+              <div className="mono absolute top-8 w-full text-center text-[10px] font-bold text-[#FFAB00] tracking-widest animate-pulse">
+                ⚠ AUTONOMOUS SAFE MODE ACTIVE
+              </div>
+            </div>
+          )}
+
+          {/* Toast Notification Banner */}
+          {g.toastMessage && (
+            <div className="mono absolute left-4 right-4 top-10 z-50 rounded-xl border border-[#00E5FF] bg-[#0D111Aee] backdrop-blur-md p-3 text-center text-xs text-[#F3F6FA] shadow-[0_0_25px_#00e5ff55] animate-bounce">
+              {g.toastMessage}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+// ============================================================================
+// 1. SCREEN: LANDING
+// ============================================================================
+const ScreenLanding: React.FC<{
+  onStart: () => void;
+  onHow: () => void;
+  onNasa: () => void;
+  onRecords: () => void;
+}> = ({ onStart, onHow, onNasa, onRecords }) => (
+  <div className="flex h-full flex-col items-center justify-between p-6 pt-10 pb-8">
+    <div className="fl h-48 w-64 flex items-center justify-center">
+      <SpacecraftSvg s={1.1} />
+    </div>
+
+    <div className="text-center my-auto">
+      <div className="text-[28px] font-extrabold tracking-tight text-[#F3F6FA] leading-tight">
+        MISSION: LAST LIGHT
+      </div>
+      <div className="mono mt-2 text-xs tracking-widest text-[#00E5FF] font-semibold">
+        DESIGN · STRESS-TEST · ADAPT · SURVIVE
+      </div>
+      <p className="mt-3 text-xs text-[#AAB4C3] max-w-xs mx-auto leading-relaxed">
+        Deep-space asteroid engineering simulator. Balance mass, power, and budget to conquer the hazards of the solar system.
+      </p>
+    </div>
+
+    <div className="w-full space-y-2.5 pb-2">
+      <button
+        type="button"
+        className="btn p cursor-pointer"
+        onClick={() => {
+          playSuccessChime();
+          onStart();
+        }}
+      >
+        START MISSION
+      </button>
+
+      <button
+        type="button"
+        className="btn cursor-pointer"
+        onClick={() => {
+          playTelemetryClick();
+          onHow();
+        }}
+      >
+        HOW TO PLAY
+      </button>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="btn flex-1 text-xs cursor-pointer"
+          onClick={() => {
+            playTelemetryClick();
+            onNasa();
+          }}
+        >
+          NASA SCIENCE
+        </button>
+        <button
+          type="button"
+          className="btn flex-1 text-xs cursor-pointer"
+          onClick={() => {
+            playTelemetryClick();
+            onRecords();
+          }}
+        >
+          RECORDS
+        </button>
+      </div>
+    </div>
+  </div>
 );
 
-export const Sheet: React.FC<{
-  children: React.ReactNode;
-  onClose: () => void;
-  className?: string;
-}> = ({ children, onClose, className = '' }) => (
-  <div className={`sheet ${className}`}>
+// ============================================================================
+// 2. SCREEN: HOW TO PLAY
+// ============================================================================
+const ScreenHowToPlay: React.FC<{ onStart: () => void; onBack: () => void }> = ({
+  onStart,
+  onBack,
+}) => {
+  const [step, setStep] = useState(0);
+  const slides = [
+    {
+      title: 'Design Spacecraft',
+      desc: 'Pick components across 8 subsystems: Structure, Propulsion, Power, Comms, Science, Thermal, Nav, and Computing.',
+      icon: '🛠️',
+    },
+    {
+      title: 'Balance Trade-Offs',
+      desc: 'Mass, power, budget, and delta-V are constantly in tension. High-performance components add mass and drain dollars.',
+      icon: '⚖️',
+    },
+    {
+      title: 'Stress-Test Hazards',
+      desc: 'Subject your build to 8 pre-flight hazards: solar flares, micrometeoroids, and deep-space thermal soak.',
+      icon: '⚡',
+    },
+    {
+      title: 'Command Real Flight',
+      desc: 'Pilot a 146-day transit to ASTERIA-1: time your burns, balance your power grid, and stream data to the Deep Space Network.',
+      icon: '🛸',
+    },
+    {
+      title: 'Asteroid Proximity',
+      desc: 'Brake into proximity orbit, survey craters in 3D, resolve emergency crises, and safely return high-value science to Earth.',
+      icon: '🪐',
+    },
+  ];
+
+  return (
+    <div className="flex h-full flex-col justify-between p-6 pt-6 pb-8">
+      <div className="flex justify-between items-center mb-2">
+        <span className="mono text-xs text-[#00E5FF] font-bold">MANUAL {step + 1}/5</span>
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-xs text-[#AAB4C3] hover:text-white cursor-pointer"
+        >
+          SKIP
+        </button>
+      </div>
+
+      <div className="card my-auto h-72 flex flex-col items-center justify-center text-center p-6 border-[#00E5FF]/40">
+        <div className="text-4xl mb-4">{slides[step].icon}</div>
+        <div className="text-xl font-bold text-white mb-2">{slides[step].title}</div>
+        <p className="text-xs text-[#AAB4C3] leading-relaxed max-w-xs">{slides[step].desc}</p>
+      </div>
+
+      <div className="flex justify-center gap-2 mb-6">
+        {slides.map((_, i) => (
+          <button
+            key={i}
+            type="button"
+            className="h-2 rounded-full transition-all cursor-pointer"
+            style={{
+              width: i === step ? '24px' : '8px',
+              background: i === step ? '#00E5FF' : '#293342',
+            }}
+            onClick={() => setStep(i)}
+          />
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {step < 4 ? (
+          <button
+            type="button"
+            className="btn p cursor-pointer"
+            onClick={() => {
+              playTelemetryClick();
+              setStep(step + 1);
+            }}
+          >
+            NEXT
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn p cursor-pointer"
+            onClick={() => {
+              playSuccessChime();
+              onStart();
+            }}
+          >
+            START MISSION
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// 3. SCREEN: MISSION BRIEFING
+// ============================================================================
+const ScreenBriefing: React.FC<{ onAccept: () => void; onBack: () => void }> = ({
+  onAccept,
+  onBack,
+}) => {
+  const [showConstraints, setShowConstraints] = useState(true);
+
+  return (
+    <div className="flex h-full flex-col justify-between p-5 pt-4 pb-8 overflow-y-auto no-scrollbar">
+      <div>
+        <div className="flex justify-center mb-2">
+          <svg viewBox="-60 -60 120 120" width="110" height="110">
+            <g className="sp">
+              <circle r="46" fill="none" stroke="#00E5FF" strokeWidth="1.5" />
+              <ellipse rx="46" ry="16" fill="none" stroke="#00E5FF" strokeWidth="1" opacity="0.6" />
+              <ellipse rx="16" ry="46" fill="none" stroke="#00E5FF" strokeWidth="1" opacity="0.6" />
+            </g>
+            <circle cx="0" cy="0" r="8" fill="#FFAB00" />
+          </svg>
+        </div>
+
+        <div className="mono text-center text-xs text-[#00E5FF] font-bold mb-1">
+          TARGET: ASTERIA-1 (101955 BENNU CLASS)
+        </div>
+        <div className="text-center text-[11px] text-[#AAB4C3] mb-4">
+          Ø 1.2 km Rubble-pile · 1.2 AU Heliocentric Orbit · 146 Days Transit
+        </div>
+
+        <div className="card mb-3">
+          <div className="text-xs font-bold text-white mb-2 tracking-wide">
+            MISSION DIRECTIVES
+          </div>
+          <div className="space-y-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-[#00E5FF] font-bold">✓</span>
+              <span>
+                <b className="text-[#00E5FF]">Primary:</b> Rendezvous miss distance &lt; 500 km
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[#00E5FF] font-bold">✓</span>
+              <span>
+                <b className="text-[#00E5FF]">Primary:</b> Acquire ≥ 60 scientific survey points
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[#AAB4C3] font-bold">✓</span>
+              <span>
+                <b className="text-[#AAB4C3]">Secondary:</b> Return ≥ 15 GB data via DSN
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[#AAB4C3] font-bold">✓</span>
+              <span>
+                <b className="text-[#AAB4C3]">Secondary:</b> Spacecraft bus integrity &gt; 40%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="card mb-4">
+          <div
+            className="flex justify-between items-center text-xs font-bold text-white cursor-pointer"
+            onClick={() => setShowConstraints(!showConstraints)}
+          >
+            <span>ENGINEERING FLIGHT CONSTRAINTS</span>
+            <span className="mono text-[#00E5FF]">{showConstraints ? '−' : '+'}</span>
+          </div>
+          {showConstraints && (
+            <div className="mono text-xs text-[#AAB4C3] space-y-1.5 pt-2 border-t border-[#293342]/60 mt-1">
+              <div className="flex justify-between">
+                <span>Maximum Dry Mass:</span>
+                <b className="text-white">≤ 2,500 kg</b>
+              </div>
+              <div className="flex justify-between">
+                <span>Discovery Budget Cap:</span>
+                <b className="text-white">≤ $50.0M</b>
+              </div>
+              <div className="flex justify-between">
+                <span>Power Bus Envelope:</span>
+                <b className="text-white">≤ 100 W</b>
+              </div>
+              <div className="flex justify-between">
+                <span>Required Interplanetary Δv:</span>
+                <b className="text-white">≥ 1,200 m/s</b>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2 mt-auto">
+        <button
+          type="button"
+          className="btn p cursor-pointer"
+          onClick={() => {
+            playSuccessChime();
+            onAccept();
+          }}
+        >
+          ACCEPT MISSION
+        </button>
+        <button
+          type="button"
+          className="btn text-xs cursor-pointer"
+          onClick={onBack}
+        >
+          BACK
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// 4. SCREEN: MISSION PRIORITIES
+// ============================================================================
+const ScreenPriorities: React.FC<{
+  priorities: { science: number; survivability: number; affordability: number };
+  onUpdate: (p: { science: number; survivability: number; affordability: number }) => void;
+  onNext: () => void;
+  onBack: () => void;
+}> = ({ priorities, onUpdate, onNext, onBack }) => {
+  const levels = ['CONSERVATIVE', 'BALANCED', 'MAXIMUM'];
+
+  return (
+    <div className="flex h-full flex-col justify-between p-5 pt-6 pb-8">
+      <div>
+        <div className="text-xl font-bold text-white mb-1">Flight Doctrine</div>
+        <p className="text-xs text-[#AAB4C3] mb-6">
+          Set your engineering priorities. High science demands heavy payloads, while survivability requires reinforced shielding.
+        </p>
+
+        <div className="space-y-4">
+          {[
+            { key: 'science', label: 'SCIENCE PAYLOAD EMPHASIS' },
+            { key: 'survivability', label: 'HAZARD SURVIVABILITY MARGIN' },
+            { key: 'affordability', label: 'FISCAL DISCIPLINE (BUDGET)' },
+          ].map(({ key, label }) => (
+            <div key={key} className="card">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-xs font-semibold text-white">{label}</span>
+                <b className="mono text-xs text-[#00E5FF]">
+                  {levels[(priorities as any)[key]]}
+                </b>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                value={(priorities as any)[key]}
+                onChange={(e) =>
+                  onUpdate({ ...priorities, [key]: parseInt(e.target.value, 10) })
+                }
+              />
+              <div className="mono flex justify-between text-[10px] text-[#6F7B8C]">
+                <span>LOW</span>
+                <span>MED</span>
+                <span>HIGH</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2 mt-auto">
+        <button
+          type="button"
+          className="btn p cursor-pointer"
+          onClick={() => {
+            playTelemetryClick();
+            onNext();
+          }}
+        >
+          CONTINUE TO DESIGN
+        </button>
+        <button
+          type="button"
+          className="btn text-xs cursor-pointer"
+          onClick={onBack}
+        >
+          BACK
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// 5. SCREEN: SPACECRAFT DESIGN STUDIO
+// ============================================================================
+const ScreenDesignStudio: React.FC<{
+  selection: Record<number, number>;
+  totals: CraftTotals;
+  onSelectComponent: (subIndex: number, optIndex: number) => void;
+  onNext: () => void;
+  onBack: () => void;
+  onOpenCompare: (subIndex: number, optIndex: number) => void;
+}> = ({ selection, totals, onSelectComponent, onNext, onBack, onOpenCompare }) => {
+  const [activeTab, setActiveTab] = useState(0);
+  const activeSub = SUBSYSTEMS[activeTab];
+  const installedIdx = selection[activeTab] || 0;
+
+  return (
+    <div className="flex h-full flex-col relative select-none">
+      {/* Top Telemetry Badges */}
+      <div className="flex-none p-3 pb-1" style={{ height: '36%' }}>
+        <div className="grid grid-cols-4 gap-1.5 mb-2">
+          <div className="pill mono text-[10px] flex-col p-1">
+            <span className="text-[#AAB4C3]">Mass</span>
+            <b className={totals.isMassValid ? 'text-white' : 'up'}>
+              {totals.massKg}kg
+            </b>
+          </div>
+          <div className="pill mono text-[10px] flex-col p-1">
+            <span className="text-[#AAB4C3]">Power</span>
+            <b className={totals.isPowerValid ? 'text-white' : 'up'}>
+              {totals.powerW}W
+            </b>
+          </div>
+          <div className="pill mono text-[10px] flex-col p-1">
+            <span className="text-[#AAB4C3]">Budget</span>
+            <b className={totals.isBudgetValid ? 'text-white' : 'up'}>
+              ${totals.costM}M
+            </b>
+          </div>
+          <div className="pill mono text-[10px] flex-col p-1">
+            <span className="text-[#AAB4C3]">Δv</span>
+            <b className={totals.isDvValid ? 'dn' : 'up'}>
+              {totals.dvMs}m/s
+            </b>
+          </div>
+        </div>
+
+        {/* Spacecraft Visual with clickable hotspot pins */}
+        <div className="h-[75%] flex items-center justify-center">
+          <SpacecraftSvg onPin={(idx) => setActiveTab(idx)} activeTab={activeTab} />
+        </div>
+      </div>
+
+      {/* Horizontal Subsystem Tabs */}
+      <div className="flex flex-none gap-2 overflow-x-auto px-3 pb-2 no-scrollbar">
+        {SUBSYSTEMS.map((sub, i) => (
+          <button
+            key={sub.id}
+            type="button"
+            onClick={() => {
+              playTelemetryClick();
+              setActiveTab(i);
+            }}
+            className="pill min-h-[36px] px-3 whitespace-nowrap text-xs font-semibold cursor-pointer transition-colors"
+            style={{
+              borderColor: i === activeTab ? '#00E5FF' : '#293342',
+              color: i === activeTab ? '#00E5FF' : '#AAB4C3',
+              background: i === activeTab ? '#00E5FF1a' : '#0D111Acc',
+            }}
+          >
+            <span className="mr-1">{sub.icon}</span> {sub.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Component Options List */}
+      <div className="flex-1 space-y-2 overflow-y-auto px-3 pb-24 no-scrollbar">
+        {activeSub.options.map((opt, i) => (
+          <div
+            key={opt.id}
+            className="card transition-all"
+            style={{ borderColor: i === installedIdx ? '#00E5FF' : '#293342' }}
+          >
+            <div className="flex justify-between items-center mb-1">
+              <b className="text-white text-xs font-bold">{opt.name}</b>
+              <span className="mono text-[10px] text-[#AAB4C3]">
+                {opt.mass >= 0 ? `+${opt.mass}` : opt.mass}kg · {opt.cost > 0 ? `+$${opt.cost}M` : '$0M'}
+              </span>
+            </div>
+            <p className="text-[11px] text-[#AAB4C3] mb-1">{opt.desc}</p>
+            <div className="mono text-[9px] text-[#6F7B8C] mb-2">{opt.spec}</div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={`btn flex-1 text-xs min-h-[38px] cursor-pointer ${
+                  i === installedIdx ? 'off' : 'p'
+                }`}
+                onClick={() => onSelectComponent(activeTab, i)}
+              >
+                {i === installedIdx ? '✓ INSTALLED' : 'INSTALL'}
+              </button>
+
+              <button
+                type="button"
+                className="btn flex-1 text-xs min-h-[38px] cursor-pointer"
+                onClick={() => {
+                  playTelemetryClick();
+                  onOpenCompare(activeTab, i);
+                }}
+              >
+                COMPARE
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom Sticky Action */}
+      <div className="absolute bottom-3 left-3 right-3 z-10">
+        <button
+          type="button"
+          className="btn p cursor-pointer"
+          onClick={() => {
+            playTelemetryClick();
+            onNext();
+          }}
+        >
+          MISSION READINESS REVIEW
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// 6. SCREEN: FLIGHT READINESS
+// ============================================================================
+const ScreenReadiness: React.FC<{
+  mode: 'COMMANDER' | 'ENGINEER';
+  totals: CraftTotals;
+  onToggleMode: () => void;
+  onNext: () => void;
+  onBack: () => void;
+}> = ({ mode, totals, onToggleMode, onNext, onBack }) => {
+  const r = totals.reliabilityPct;
+  const col = r >= 80 ? '#00E676' : r >= 60 ? '#FFAB00' : '#FF1744';
+
+  return (
+    <div className="flex h-full flex-col justify-between p-4 pb-8 overflow-y-auto no-scrollbar">
+      <div>
+        <div className="flex justify-between items-center mb-2">
+          <div className="text-lg font-bold text-white">Flight Readiness</div>
+          <button
+            type="button"
+            className="pill text-xs font-semibold border-[#00E5FF] text-[#00E5FF] cursor-pointer"
+            onClick={onToggleMode}
+          >
+            MODE: {mode}
+          </button>
+        </div>
+
+        {/* Circular Gauge */}
+        <div className="my-3 flex justify-center">
+          <svg viewBox="0 0 120 120" width="150" height="150">
+            <circle cx="60" cy="60" r="50" fill="none" stroke="#293342" strokeWidth="10" />
+            <circle
+              cx="60"
+              cy="60"
+              r="50"
+              fill="none"
+              stroke={col}
+              strokeWidth="10"
+              strokeDasharray={`${(r * 3.14).toFixed(1)} 314`}
+              transform="rotate(-90 60 60)"
+              strokeLinecap="round"
+              style={{ transition: 'all .6s ease-out' }}
+            />
+            <text
+              x="60"
+              y="68"
+              textAnchor="middle"
+              fill="#F3F6FA"
+              fontSize="24"
+              className="mono font-bold"
+            >
+              {r}%
+            </text>
+          </svg>
+        </div>
+
+        {!totals.isFlightReady && (
+          <div className="card mb-3 bl border-[#FF1744] text-[#FF1744] text-xs font-bold text-center">
+            ⚠ HARD CONSTRAINT VIOLATION: Review Mass, Power, or Budget!
+          </div>
+        )}
+
+        <ProgressBar label="Power Bus Envelope" value={100 - totals.powerW + 20} color="#00E676" />
+        <ProgressBar label="Structural Payload Margin" value={(2500 - totals.massKg) / 5} />
+        <ProgressBar label="Propulsion Margin (Δv)" value={(totals.dvMs / 1600) * 100} />
+        <ProgressBar label="Hardware Reliability" value={totals.reliabilityPct} color={col} />
+        <ProgressBar label="Fiscal Contingency Reserve" value={totals.budgetRemainingM * 4} color="#FFAB00" />
+
+        {mode === 'ENGINEER' && (
+          <div className="card mono text-[11px] text-[#AAB4C3] mt-3 space-y-1">
+            <div>Interplanetary Δv: {totals.dvMs} m/s (Target 1,200 m/s)</div>
+            <div>Dry Mass: {totals.massKg} kg · Bus Load: {totals.powerW} W</div>
+            <div>Radiation Tolerance: {totals.radTolKrad} krad (Si equivalent)</div>
+            <div>Remaining Reserve: ${totals.budgetRemainingM}M out of $50M</div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2 mt-4">
+        <button
+          type="button"
+          className="btn p cursor-pointer"
+          onClick={() => {
+            playTelemetryClick();
+            onNext();
+          }}
+        >
+          CONTINUE TO STRESS TEST
+        </button>
+        <button
+          type="button"
+          className="btn text-xs cursor-pointer"
+          onClick={onBack}
+        >
+          BACK TO DESIGN
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// 7. SCREEN: STRESS TEST
+// ============================================================================
+const ScreenStressTest: React.FC<{
+  totals: CraftTotals;
+  selection: Record<number, number>;
+  onLaunch: () => void;
+  onRedesign: () => void;
+}> = ({ totals, selection, onLaunch, onRedesign }) => {
+  const [selectedHazard, setSelectedHazard] = useState(0);
+  const [testState, setTestState] = useState<{ active?: boolean; damage?: number; outcome?: string }>({});
+
+  const hazard = STRESS_HAZARDS[selectedHazard];
+
+  const runTest = () => {
+    playWarningAlert();
+    setTestState({ active: true });
+
+    setTimeout(() => {
+      // Dynamic damage calculation based on installed components
+      let penalty = hazard.penalty;
+      if (hazard.sub === 'computing' && (selection[7] || 0) > 0) penalty -= 18;
+      if (hazard.sub === 'structure' && (selection[0] || 0) === 2) penalty -= 20;
+      if (hazard.sub === 'thermal' && (selection[5] || 0) > 0) penalty -= 16;
+      if (hazard.sub === 'power' && (selection[2] || 0) > 0) penalty -= 14;
+
+      const dmg = Math.max(4, Math.round(penalty * 0.9));
+      const score = Math.max(30, totals.reliabilityPct - dmg);
+      const outcome =
+        score >= 70
+          ? 'SURVIVES NOMINAL'
+          : score >= 48
+          ? 'SURVIVES WITH DEGRADATION'
+          : 'CRITICAL FAILURE';
+
+      if (score >= 70) {
+        playSuccessChime();
+      } else {
+        playWarningAlert();
+      }
+
+      setTestState({ active: false, damage: dmg, outcome });
+    }, 1200);
+  };
+
+  return (
+    <div className="flex h-full flex-col justify-between p-4 pb-8 overflow-y-auto no-scrollbar">
+      <div>
+        <div className="relative mb-3 h-36 overflow-hidden rounded-xl bg-[#0D111A] flex items-center justify-center border border-[#293342]">
+          <SpacecraftSvg s={0.75} />
+          {testState.active && (
+            <div
+              className="absolute inset-0 bl pointer-events-none"
+              style={{
+                background: 'linear-gradient(90deg, transparent, #FF174488, transparent)',
+              }}
+            />
+          )}
+        </div>
+
+        <ProgressBar
+          label="POWER SURVIVAL"
+          value={testState.damage ? 100 - testState.damage : 100}
+          color="#FFAB00"
+        />
+        <ProgressBar
+          label="HULL INTEGRITY"
+          value={testState.damage ? 100 - testState.damage * 1.4 : 100}
+          color="#00E676"
+        />
+
+        <div className="my-3 grid grid-cols-2 gap-2">
+          {STRESS_HAZARDS.map((h, i) => (
+            <button
+              key={h.name}
+              type="button"
+              className="card min-h-[48px] text-[11px] font-semibold cursor-pointer text-left transition-colors"
+              style={{
+                borderColor: i === selectedHazard ? '#00E5FF' : '#293342',
+                color: i === selectedHazard ? '#00E5FF' : '#F3F6FA',
+              }}
+              onClick={() => {
+                playTelemetryClick();
+                setSelectedHazard(i);
+                setTestState({});
+              }}
+            >
+              {h.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {testState.outcome && (
+        <div className="card my-2 border-[#00E5FF]">
+          <div className="mono text-xs text-[#00E5FF] font-bold">
+            TEST OUTCOME: {testState.outcome}
+          </div>
+          <div className="text-xs text-[#AAB4C3] mt-1">
+            Estimated damage: {testState.damage}%. Hardened systems reduce degradation.
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2 mt-2">
+        <button
+          type="button"
+          className="btn p cursor-pointer"
+          onClick={runTest}
+          disabled={testState.active}
+        >
+          {testState.active ? 'SIMULATING HAZARD...' : 'RUN STRESS TEST'}
+        </button>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="btn flex-1 text-xs cursor-pointer"
+            onClick={onRedesign}
+          >
+            REDESIGN
+          </button>
+          <button
+            type="button"
+            className="btn flex-1 text-xs cursor-pointer"
+            onClick={onLaunch}
+          >
+            PROCEED TO LAUNCH
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// 8. SCREEN: LAUNCH COUNTDOWN
+// ============================================================================
+const ScreenLaunchCountdown: React.FC<{
+  totals: CraftTotals;
+  onIgnitionComplete: () => void;
+}> = ({ totals, onIgnitionComplete }) => {
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (countdown === null) return;
+
+    if (countdown < 0) {
+      playSuccessChime();
+      const t = setTimeout(onIgnitionComplete, 1200);
+      return () => clearTimeout(t);
+    }
+
+    if (countdown === 0) {
+      playThrusterPulse();
+    } else {
+      playTelemetryClick();
+    }
+
+    const t = setTimeout(() => setCountdown(countdown - 1), countdown === 0 ? 1600 : 800);
+    return () => clearTimeout(t);
+  }, [countdown, onIgnitionComplete]);
+
+  if (countdown !== null) {
+    return (
+      <div className="flex h-full items-center justify-center bg-black relative overflow-hidden select-none">
+        {countdown > 0 ? (
+          <div key={countdown} className="pg mono text-[130px] font-bold text-[#00E5FF]">
+            {countdown}
+          </div>
+        ) : countdown === 0 ? (
+          <div className="flex flex-col items-center">
+            <div className="mono text-center text-4xl text-[#FFAB00] font-extrabold tracking-wider animate-bounce">
+              IGNITION
+            </div>
+            {Array.from({ length: 16 }, (_, i) => (
+              <span
+                key={i}
+                className="absolute h-10 w-1 rounded bg-[#FFAB00]"
+                style={{
+                  left: 140 + i * 8,
+                  top: 0,
+                  animation: `rk ${0.9 + (i % 4) * 0.15}s linear infinite`,
+                  animationDelay: `${i * 0.04}s`,
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="mono text-2xl font-bold text-[#00E676] animate-pulse">
+            ORBIT INSERTION CONFIRMED
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col justify-between p-5 pt-12 pb-8">
+      <div className="text-center">
+        <div className="text-2xl font-bold text-white mb-2">LAUNCH AUTHORIZATION</div>
+        <p className="text-xs text-[#AAB4C3]">
+          All range tracking stations ready. Confirm flight parameters before liftoff.
+        </p>
+      </div>
+
+      <div className="space-y-3 my-auto">
+        <div className="card flex justify-between items-center text-xs">
+          <span>Readiness Score</span>
+          <b className="mono text-[#00E5FF] text-sm">{totals.reliabilityPct}%</b>
+        </div>
+        <div className="card flex justify-between items-center text-xs">
+          <span>Available Interplanetary Δv</span>
+          <b className="mono text-[#00E676] text-sm">+{totals.dvMs} m/s</b>
+        </div>
+        <div className="card flex justify-between items-center text-xs">
+          <span>Total Vehicle Mass</span>
+          <b className="mono text-white text-sm">{totals.massKg} kg</b>
+        </div>
+        <div className="card flex justify-between items-center text-xs">
+          <span>Target Destination</span>
+          <b className="mono text-[#FFAB00] text-sm">ASTERIA-1 (146 Days)</b>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="btn p cursor-pointer"
+        onClick={() => setCountdown(10)}
+      >
+        CONFIRM & INITIATE COUNTDOWN
+      </button>
+    </div>
+  );
+};
+
+// ============================================================================
+// 9. SCREEN: FLIGHT SIMULATION (THE CORE GAME!)
+// ============================================================================
+const ScreenFlightSim: React.FC<{
+  g: GameState;
+  totals: CraftTotals;
+  updateG: (updater: Partial<GameState> | ((prev: GameState) => GameState)) => void;
+  onExecuteManeuver: (type: 'tcm1' | 'tcm2' | 'rdvz') => void;
+  onExecuteScan: (inst: string, costW: number, sci: number, gb: number) => void;
+  onDownlink: () => void;
+  onOpenRock: () => void;
+}> = ({ g, totals, updateG, onExecuteManeuver, onExecuteScan, onDownlink, onOpenRock }) => {
+  const [pan, setPan] = useState<[number, number]>([0, 0]);
+  const [zoom, setZoom] = useState(1);
+  const [dragStart, setDragStart] = useState<[number, number] | null>(null);
+
+  const transitPct = g.day / 146;
+  const sunDistAu = +(1.0 + transitPct * 0.25).toFixed(2);
+  const earthDistAu = +(transitPct * 0.85 + 0.05).toFixed(2);
+  const lightLatencyMin = +(earthDistAu * 8.3).toFixed(1);
+
+  // Bezier curve calculations for orbit map
+  const bz = (a: number, b: number, c: number, t: number) =>
+    (1 - t) * (1 - t) * a + 2 * (1 - t) * t * b + t * t * c;
+
+  const cpX = g.maneuversDone.tcm1 ? 240 : 200;
+  const cpY = g.maneuversDone.tcm2 ? 140 : 380;
+  const craftX = bz(80, cpX * 0.8, 310, transitPct);
+  const craftY = bz(300, cpY, 200, transitPct);
+
+  const phaseName =
+    g.day < 5
+      ? 'LAUNCH / TLI'
+      : g.day < 60
+      ? 'CRUISE (TCM-1)'
+      : g.day < 110
+      ? 'APPROACH (TCM-2)'
+      : g.day < 130
+      ? 'RENDEZVOUS'
+      : 'SCIENCE SURVEY';
+
+  return (
+    <div className="relative h-full overflow-hidden select-none flex flex-col">
+      {/* Top Status & Speed Controls */}
+      <div className="flex-none p-3 pt-1 flex items-center justify-between text-xs z-20 bg-gradient-to-b from-[#080B12] to-transparent">
+        <div className="flex items-center gap-1.5">
+          <span className="pill mono text-[10px] text-[#00E5FF] font-bold">
+            {phaseName}
+          </span>
+          <span className="pill mono text-[10px]">Day {g.day}/146</span>
+        </div>
+
+        {/* Speed Multipliers */}
+        <div className="flex items-center gap-1">
+          {[
+            { s: 0, l: '⏸' },
+            { s: 1, l: '1X' },
+            { s: 5, l: '5X' },
+            { s: 20, l: '20X' },
+            { s: 100, l: '100X' },
+          ].map(({ s, l }) => (
+            <button
+              key={s}
+              type="button"
+              className="pill px-2 py-0.5 text-[9.5px] mono cursor-pointer"
+              style={{
+                color: g.timeSpeed === s ? '#00E5FF' : '#AAB4C3',
+                borderColor: g.timeSpeed === s ? '#00E5FF' : '#293342',
+                background: g.timeSpeed === s ? '#00E5FF22' : '#0D111Acc',
+              }}
+              onClick={() => {
+                playTelemetryClick();
+                updateG({ timeSpeed: s });
+              }}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Interactive Orbit Trajectory Canvas */}
+      <div className="flex-1 relative overflow-hidden">
+        <svg
+          viewBox="0 0 393 540"
+          className="absolute inset-0 w-full h-full touch-none"
+          onPointerDown={(e) => setDragStart([e.clientX, e.clientY])}
+          onPointerMove={(e) => {
+            if (dragStart) {
+              setPan([pan[0] + e.clientX - dragStart[0], pan[1] + e.clientY - dragStart[1]]);
+              setDragStart([e.clientX, e.clientY]);
+            }
+          }}
+          onPointerUp={() => setDragStart(null)}
+          onPointerLeave={() => setDragStart(null)}
+        >
+          <g transform={`translate(${pan[0]} ${pan[1]}) scale(${zoom})`}>
+            {/* Background stars */}
+            {Array.from({ length: 30 }, (_, i) => (
+              <circle
+                key={i}
+                cx={(i * 97) % 393}
+                cy={(i * 61) % 540}
+                r={i % 3 ? 0.9 : 1.4}
+                fill="#fff"
+                opacity="0.45"
+              />
+            ))}
+
+            {/* Orbit Trajectory Arc */}
+            <path
+              d={`M80 300 Q ${cpX * 0.8} ${cpY} 310 200`}
+              fill="none"
+              stroke="#00E676"
+              strokeWidth="2"
+              strokeDasharray="6 4"
+              opacity="0.75"
+            />
+
+            {/* Earth Body */}
+            <circle cx="80" cy="300" r="32" fill="#12467a" stroke="#00E5FF" strokeWidth="1.5" />
+            <text x="80" y="346" fill="#AAB4C3" fontSize="10" textAnchor="middle" className="mono">
+              EARTH
+            </text>
+
+            {/* Target Asteroid ASTERIA-1 */}
+            <g
+              className="cursor-pointer"
+              onClick={() => {
+                playTelemetryClick();
+                onOpenRock();
+              }}
+            >
+              <circle cx="310" cy="200" r="16" fill="#3a3f4b" stroke="#AAB4C3" strokeWidth="1.5" />
+              <circle cx="310" cy="200" r="22" fill="none" stroke="#00E5FF" strokeWidth="1" strokeDasharray="3 3">
+                <animate attributeName="r" values="20;26;20" dur="3s" repeatCount="indefinite" />
+              </circle>
+              <text x="310" y="234" fill="#AAB4C3" fontSize="10" textAnchor="middle" className="mono">
+                ASTERIA-1
+              </text>
+            </g>
+
+            {/* Spacecraft Marker */}
+            <g transform={`translate(${craftX} ${craftY})`}>
+              <circle r="8" fill="#00E5FF">
+                <animate attributeName="r" values="6;10;6" dur="2s" repeatCount="indefinite" />
+              </circle>
+              <rect x="-4" y="-4" width="8" height="8" fill="#F3F6FA" rx="1" />
+            </g>
+          </g>
+        </svg>
+
+        {/* Zoom Buttons */}
+        <div className="absolute right-3 top-3 z-10 flex flex-col gap-1.5">
+          <button
+            type="button"
+            className="pill min-h-[36px] min-w-[36px] text-sm font-bold text-white cursor-pointer"
+            onClick={() => setZoom((z) => Math.min(2.5, z + 0.25))}
+          >
+            ＋
+          </button>
+          <button
+            type="button"
+            className="pill min-h-[36px] min-w-[36px] text-sm font-bold text-white cursor-pointer"
+            onClick={() => setZoom((z) => Math.max(0.6, z - 0.25))}
+          >
+            －
+          </button>
+        </div>
+
+        {/* Left Telemetry HUD */}
+        <div className="absolute left-3 top-3 z-10 flex flex-col gap-1 text-[10px] mono">
+          <div className="pill py-1 px-2.5">
+            <span className="text-[#AAB4C3] mr-1">Health:</span>
+            <b className={g.healthPct > 50 ? 'text-[#00E676]' : 'up'}>
+              {Math.round(g.healthPct)}%
+            </b>
+          </div>
+          <div className="pill py-1 px-2.5">
+            <span className="text-[#AAB4C3] mr-1">Fuel:</span>
+            <b className="text-[#00E5FF]">{Math.round(g.fuelKg)} kg</b>
+          </div>
+          <div className="pill py-1 px-2.5">
+            <span className="text-[#AAB4C3] mr-1">Battery:</span>
+            <b className={g.batteryPct > 20 ? 'text-[#00E5FF]' : 'up'}>
+              {Math.round(g.batteryPct)}%
+            </b>
+          </div>
+          <div className="pill py-1 px-2.5">
+            <span className="text-[#AAB4C3] mr-1">Buffer:</span>
+            <b className="text-[#00E5FF]">{g.dataBufferGb.toFixed(1)} GB</b>
+          </div>
+          <div className="pill py-1 px-2.5">
+            <span className="text-[#AAB4C3] mr-1">Miss Dist:</span>
+            <b className={g.missDistanceKm < 500 ? 'text-[#00E676]' : 'text-[#FFAB00]'}>
+              {g.missDistanceKm.toLocaleString()} km
+            </b>
+          </div>
+          <div className="pill py-1 px-2.5">
+            <span className="text-[#AAB4C3] mr-1">Temp:</span>
+            <b className="text-[#00E5FF]">{g.busTempC}°C</b>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom 6-icon Dock Bar */}
+      <div className="flex-none grid grid-cols-6 gap-1 border-t border-[#293342] bg-[#0D111Aee] backdrop-blur-md p-2 pb-4 z-20">
+        {[
+          { id: 'maneuver', icon: '⌖', label: 'MANEUVER' },
+          { id: 'observe', icon: '◉', label: 'SURFACE' },
+          { id: 'power', icon: '⚡', label: 'POWER' },
+          { id: 'comms', icon: '📡', label: 'COMMS' },
+          { id: 'science', icon: '⚗', label: 'SCIENCE' },
+          { id: 'safe', icon: '⛨', label: 'SAFE' },
+        ].map(({ id, icon, label }) => (
+          <button
+            key={id}
+            type="button"
+            className="min-h-[50px] rounded-lg text-center cursor-pointer active:scale-95 transition-transform"
+            style={{
+              color:
+                id === 'safe' && g.safeMode
+                  ? '#FFAB00'
+                  : g.activeDockTab === id
+                  ? '#00E5FF'
+                  : '#F3F6FA',
+            }}
+            onClick={() => {
+              playTelemetryClick();
+              if (id === 'safe') {
+                updateG({ safeMode: !g.safeMode });
+              } else if (id === 'observe') {
+                onOpenRock();
+              } else {
+                updateG({ activeDockTab: g.activeDockTab === id ? null : (id as FlightDockTab) });
+              }
+            }}
+          >
+            <div className="text-lg leading-tight">{icon}</div>
+            <div className="text-[7.5px] tracking-tight font-semibold mt-0.5">{label}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* MANEUVER BOTTOM SHEET */}
+      {g.activeDockTab === 'maneuver' && (
+        <Sheet onClose={() => updateG({ activeDockTab: null })}>
+          <div className="text-sm font-bold text-white mb-2">TRAJECTORY CORRECTION BURNS</div>
+          <p className="text-xs text-[#AAB4C3] mb-3">
+            Execute burns to reduce asteroid miss distance. Insufficient delta-V will cause a flyby.
+          </p>
+
+          <div className="space-y-2 mb-4 text-xs">
+            <div className="card">
+              <div className="flex justify-between items-center mb-1">
+                <span className="font-bold text-white">TCM-1: Midcourse Correction</span>
+                <b className={g.maneuversDone.tcm1 ? 'dn' : 'text-[#AAB4C3]'}>
+                  {g.maneuversDone.tcm1 ? '✓ EXECUTED' : 'READY'}
+                </b>
+              </div>
+              <div className="mono text-[11px] text-[#AAB4C3] mb-2">
+                Burn: 75 kg Propellant · Reduces miss by 24,000 km
+              </div>
+              {!g.maneuversDone.tcm1 && (
+                <button
+                  type="button"
+                  className="btn p min-h-[36px] text-xs cursor-pointer"
+                  onClick={() => onExecuteManeuver('tcm1')}
+                >
+                  EXECUTE TCM-1 BURN
+                </button>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="flex justify-between items-center mb-1">
+                <span className="font-bold text-white">TCM-2: Approach Guidance</span>
+                <b className={g.maneuversDone.tcm2 ? 'dn' : 'text-[#AAB4C3]'}>
+                  {g.maneuversDone.tcm2 ? '✓ EXECUTED' : 'READY'}
+                </b>
+              </div>
+              <div className="mono text-[11px] text-[#AAB4C3] mb-2">
+                Burn: 95 kg Propellant · Reduces miss by 12,000 km
+              </div>
+              {!g.maneuversDone.tcm2 && (
+                <button
+                  type="button"
+                  className="btn p min-h-[36px] text-xs cursor-pointer"
+                  onClick={() => onExecuteManeuver('tcm2')}
+                >
+                  EXECUTE TCM-2 BURN
+                </button>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="flex justify-between items-center mb-1">
+                <span className="font-bold text-white">Rendezvous Insertion Burn</span>
+                <b className={g.maneuversDone.rdvz ? 'dn' : 'text-[#AAB4C3]'}>
+                  {g.maneuversDone.rdvz ? '✓ EXECUTED' : 'READY'}
+                </b>
+              </div>
+              <div className="mono text-[11px] text-[#AAB4C3] mb-2">
+                Burn: 140 kg Propellant · Enters proximity orbit (&lt; 100 km)
+              </div>
+              {!g.maneuversDone.rdvz && (
+                <button
+                  type="button"
+                  className="btn p min-h-[36px] text-xs cursor-pointer"
+                  onClick={() => onExecuteManeuver('rdvz')}
+                >
+                  EXECUTE INSERTION BURN
+                </button>
+              )}
+            </div>
+          </div>
+        </Sheet>
+      )}
+
+      {/* POWER MANAGEMENT SHEET */}
+      {g.activeDockTab === 'power' && (
+        <Sheet onClose={() => updateG({ activeDockTab: null })}>
+          <div className="text-sm font-bold text-white mb-1">ELECTRICAL POWER GRID</div>
+          <div className="mono text-xs text-[#00E5FF] mb-3">
+            Solar Irradiance: {sunDistAu} AU ({Math.round(100 / (sunDistAu * sunDistAu))}% generation)
+          </div>
+
+          {(['science', 'comms', 'computing', 'thermal'] as const).map((k) => (
+            <div key={k} className="mb-2">
+              <div className="mono flex justify-between text-xs text-[#AAB4C3] mb-0.5">
+                <span>{k.toUpperCase()}</span>
+                <b className="text-[#00E5FF]">{g.powerAlloc[k]}%</b>
+              </div>
+              <input
+                type="range"
+                min="5"
+                max="80"
+                value={g.powerAlloc[k]}
+                onChange={(e) =>
+                  updateG({
+                    powerAlloc: { ...g.powerAlloc, [k]: parseInt(e.target.value, 10) },
+                  })
+                }
+              />
+            </div>
+          ))}
+
+          <button
+            type="button"
+            className="btn p mt-2 min-h-[40px] text-xs cursor-pointer"
+            onClick={() => {
+              playSuccessChime();
+              updateG({ activeDockTab: null, toastMessage: 'Power grid rebalanced.' });
+            }}
+          >
+            APPLY CONFIGURATION
+          </button>
+        </Sheet>
+      )}
+
+      {/* COMMS DOWNLINK SHEET */}
+      {g.activeDockTab === 'comms' && (
+        <Sheet onClose={() => updateG({ activeDockTab: null })}>
+          <div className="text-sm font-bold text-white mb-1">DEEP SPACE NETWORK LINK</div>
+          <div className="mono text-xs text-[#AAB4C3] mb-2">
+            Distance: {earthDistAu} AU · 1-Way Latency: {lightLatencyMin} min
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs mono mb-3">
+            <div className="card p-2">
+              Signal:{' '}
+              <b className={g.day % 30 < 22 ? 'text-[#00E676]' : 'up'}>
+                {g.day % 30 < 22 ? 'LOCKED (GOLDSTONE)' : 'NO VISIBILITY'}
+              </b>
+            </div>
+            <div className="card p-2">
+              Data Rate: <b className="text-[#00E5FF]">2.4 Mbps</b>
+            </div>
+            <div className="card p-2">
+              Downlinked: <b className="text-[#00E5FF]">{g.dataReturnedGb} GB</b>
+            </div>
+            <div className="card p-2">
+              Contacts:{' '}
+              <b className="text-[#00E5FF]">{g.downlinksDone} passes</b>
+            </div>
+          </div>
+
+          <ProgressBar
+            label={`Recorder Buffer (${g.dataBufferGb} / ${g.dataBufferMaxGb} GB)`}
+            value={(g.dataBufferGb / g.dataBufferMaxGb) * 100}
+          />
+
+          <button
+            type="button"
+            className="btn p mt-2 min-h-[40px] text-xs cursor-pointer"
+            onClick={onDownlink}
+          >
+            DOWNLINK TO EARTH NOW
+          </button>
+        </Sheet>
+      )}
+
+      {/* SCIENCE OPERATIONS SHEET */}
+      {g.activeDockTab === 'science' && (
+        <Sheet onClose={() => updateG({ activeDockTab: null })}>
+          <div className="text-sm font-bold text-white mb-1">INSTRUMENT SCIENTIFIC OBSERVATIONS</div>
+          <div className="mono text-xs text-[#00E5FF] mb-3">
+            Cumulative Science Yield: {g.sciencePoints} pts
+          </div>
+
+          <div className="space-y-2 mb-3">
+            {[
+              { id: 'Camera', label: 'PolyCam Framing Imager', cost: 12, sci: 8, gb: 1.8 },
+              { id: 'IR Spec', label: 'OVIRS Infrared Spectrometer', cost: 18, sci: 12, gb: 2.4 },
+              { id: 'Radar', label: 'Subsurface Sounder', cost: 26, sci: 16, gb: 3.5 },
+              { id: 'LIDAR', label: '3D Laser Altimeter', cost: 22, sci: 14, gb: 2.8 },
+            ].map(({ id, label, cost, sci, gb }) => (
+              <div key={id} className="card flex justify-between items-center p-2 text-xs">
+                <div>
+                  <b className="text-white block">{label}</b>
+                  <span className="mono text-[10px] text-[#6F7B8C]">
+                    +{sci} Pts · +{gb} GB Data
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="btn p min-h-[34px] w-28 text-xs cursor-pointer"
+                  onClick={() => onExecuteScan(id, cost, sci, gb)}
+                >
+                  EXECUTE
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="btn min-h-[40px] text-xs cursor-pointer"
+            onClick={onOpenRock}
+          >
+            SURFACE PROXIMITY SURVEY (3D)
+          </button>
+        </Sheet>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// 10. SCREEN: ASTEROID SURFACE SURVEY (3D / 2.5D ROTATION)
+// ============================================================================
+const ScreenAsteroidSurvey: React.FC<{
+  g: GameState;
+  updateG: (updater: Partial<GameState> | ((prev: GameState) => GameState)) => void;
+  onBack: () => void;
+}> = ({ g, updateG, onBack }) => {
+  const [rot, setRot] = useState(0);
+  const [dragX, setDragX] = useState<number | null>(null);
+  const [inspectedPin, setInspectedPin] = useState<string | null>(null);
+
+  const targets = [
+    { id: 'Alpha', name: 'Nightingale Crater', desc: 'Fine-grained black organic regolith. High scientific value.', sci: 20, gb: 2.5 },
+    { id: 'Beta', name: 'Osprey Basin', desc: 'B-type carbonaceous asteroid boulder field with hydrated minerals.', sci: 16, gb: 2.0 },
+    { id: 'Gamma', name: 'Equatorial Ridge', desc: 'Rotational diamond bulge. Rich in ancient volatile ice deposits.', sci: 24, gb: 3.2 },
+  ];
+
+  return (
+    <div className="flex h-full flex-col justify-between p-4 pt-4 pb-8 select-none">
+      <div className="text-center">
+        <div className="mono text-xs text-[#00E5FF] font-bold">
+          ASTERIA-1 · PROXIMITY RECONNAISSANCE
+        </div>
+        <div className="text-[11px] text-[#AAB4C3]">
+          Drag to rotate asteroid sphere · Tap markers to survey
+        </div>
+      </div>
+
+      <div
+        className="touch-none cursor-grab flex items-center justify-center my-auto"
+        onPointerDown={(e) => setDragX(e.clientX)}
+        onPointerMove={(e) => {
+          if (dragX !== null) {
+            setRot((r) => r + (e.clientX - dragX) / 50);
+            setDragX(e.clientX);
+          }
+        }}
+        onPointerUp={() => setDragX(null)}
+        onPointerLeave={() => setDragX(null)}
+        style={{ position: 'relative', width: 280, height: 280 }}
+      >
+        <AsteroidSvg rot={rot} size={135} />
+
+        {targets.map((t, i) => {
+          const a = i * 2.1 + rot;
+          if (Math.cos(a) <= 0) return null;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className="pill absolute min-h-[38px] min-w-[38px] text-xs font-bold border-[#00E5FF] text-[#00E5FF] cursor-pointer shadow-lg active:scale-95"
+              style={{
+                left: 140 + Math.sin(a) * 90 - 19,
+                top: 120 + (i - 1) * 36 - 19,
+                background: '#0D111Aee',
+              }}
+              onClick={() => {
+                playTelemetryClick();
+                setInspectedPin(t.id);
+              }}
+            >
+              {t.id[0]}
+            </button>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        className="btn cursor-pointer"
+        onClick={onBack}
+      >
+        RETURN TO FLIGHT NAVIGATION
+      </button>
+
+      {/* Surface Feature Sheet */}
+      {inspectedPin && (
+        <Sheet onClose={() => setInspectedPin(null)}>
+          {(() => {
+            const tgt = targets.find((t) => t.id === inspectedPin)!;
+            return (
+              <div>
+                <div className="text-sm font-bold text-white mb-1">{tgt.name}</div>
+                <p className="text-xs text-[#AAB4C3] mb-3">{tgt.desc}</p>
+                <div className="mono text-xs text-[#00E5FF] mb-3">
+                  Yield: +{tgt.sci} Science Points · +{tgt.gb} GB Data
+                </div>
+
+                <button
+                  type="button"
+                  className="btn p min-h-[40px] text-xs cursor-pointer"
+                  onClick={() => {
+                    playSuccessChime();
+                    updateG({
+                      sciencePoints: +(g.sciencePoints + tgt.sci).toFixed(1),
+                      dataBufferGb: Math.min(g.dataBufferMaxGb, +(g.dataBufferGb + tgt.gb).toFixed(2)),
+                      surveysDone: g.surveysDone + 1,
+                      toastMessage: `SURFACE SURVEY: +${tgt.sci} Science, +${tgt.gb} GB captured!`,
+                    });
+                    setInspectedPin(null);
+                  }}
+                >
+                  ACQUIRE TARGET DATA
+                </button>
+              </div>
+            );
+          })()}
+        </Sheet>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// 11. SCREEN: MISSION DEBRIEF & SCORING
+// ============================================================================
+const ScreenDebrief: React.FC<{
+  g: GameState;
+  totals: CraftTotals;
+  onRetry: () => void;
+  onHome: () => void;
+  onLeaderboard: () => void;
+}> = ({ g, totals, onRetry, onHome, onLeaderboard }) => {
+  const isSuccess = g.healthPct >= 35 && g.sciencePoints >= 50;
+
+  // Composite aerospace score
+  const scienceScore = Math.min(300, Math.round(g.sciencePoints * 3.5));
+  const dataScore = Math.min(250, Math.round(g.dataReturnedGb * 15));
+  const survivalScore = Math.round(g.healthPct * 2);
+  const trajectoryScore = g.missDistanceKm < 500 ? 150 : g.missDistanceKm < 5000 ? 75 : 0;
+  const compositeScore = scienceScore + dataScore + survivalScore + trajectoryScore;
+
+  const medal =
+    compositeScore >= 750
+      ? '🥇 LEGENDARY FLIGHT DIRECTOR (GOLD)'
+      : compositeScore >= 550
+      ? '🥈 MISSION COMMANDER (SILVER)'
+      : '🥉 FLIGHT SPECIALIST (BRONZE)';
+
+  return (
+    <div className="flex h-full flex-col justify-between p-4 pb-8 overflow-y-auto no-scrollbar">
+      <div>
+        <div
+          className="mx-auto mb-3 mt-4 w-fit rounded-full px-5 py-1.5 font-bold text-xs tracking-wider"
+          style={{
+            background: isSuccess ? '#00E67622' : '#FFAB0022',
+            color: isSuccess ? '#00E676' : '#FFAB00',
+            border: '1px solid',
+            borderColor: isSuccess ? '#00E676' : '#FFAB00',
+          }}
+        >
+          {isSuccess ? 'MISSION NOMINAL · SUCCESS' : 'MISSION TERMINATED · FAILED'}
+        </div>
+
+        <div className="text-center font-bold text-sm text-[#00E5FF] mb-3">
+          {medal}
+        </div>
+
+        <div className="space-y-1.5 text-xs mono mb-4">
+          <div className="card flex justify-between p-2">
+            <span className="text-[#AAB4C3]">Composite Score</span>
+            <b className="text-white text-sm">{compositeScore} / 1000 PTS</b>
+          </div>
+          <div className="card flex justify-between p-2">
+            <span className="text-[#AAB4C3]">Science Gathered</span>
+            <b className="text-[#00E5FF]">{g.sciencePoints.toFixed(1)} PTS</b>
+          </div>
+          <div className="card flex justify-between p-2">
+            <span className="text-[#AAB4C3]">Data Streamed via DSN</span>
+            <b className="text-[#00E5FF]">{g.dataReturnedGb.toFixed(1)} GB</b>
+          </div>
+          <div className="card flex justify-between p-2">
+            <span className="text-[#AAB4C3]">Final Spacecraft Health</span>
+            <b className={g.healthPct > 40 ? 'text-[#00E676]' : 'up'}>
+              {Math.round(g.healthPct)}%
+            </b>
+          </div>
+          <div className="card flex justify-between p-2">
+            <span className="text-[#AAB4C3]">Final Asteroid Miss Distance</span>
+            <b className="text-white">{g.missDistanceKm.toLocaleString()} km</b>
+          </div>
+          <div className="card flex justify-between p-2">
+            <span className="text-[#AAB4C3]">Total Mission Cost</span>
+            <b className="text-white">${totals.costM}M</b>
+          </div>
+        </div>
+
+        {/* Resolved event consequences */}
+        {g.resolvedEvents.length > 0 && (
+          <div className="card mb-4">
+            <div className="text-xs font-bold text-white mb-2">CRISIS DECISIONS LOG</div>
+            <div className="space-y-1.5 text-[11px] text-[#AAB4C3]">
+              {g.resolvedEvents.map((r) => (
+                <div key={r.id} className="border-b border-[#293342]/40 pb-1 last:border-none">
+                  <span className="text-[#00E5FF] font-semibold">[{r.choice.toUpperCase()}]: </span>
+                  {r.impact}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2 mt-auto">
+        <button
+          type="button"
+          className="btn p cursor-pointer"
+          onClick={onRetry}
+        >
+          RETRY MISSION (NEW DESIGN)
+        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="btn flex-1 text-xs cursor-pointer"
+            onClick={onLeaderboard}
+          >
+            VIEW RECORDS
+          </button>
+          <button
+            type="button"
+            className="btn flex-1 text-xs cursor-pointer"
+            onClick={onHome}
+          >
+            MAIN MENU
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// 12. SCREEN: LEADERBOARD & RECORDS
+// ============================================================================
+const ScreenLeaderboard: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  let records: any[] = [];
+  try {
+    records = JSON.parse(localStorage.getItem('last_light_records') || '[]');
+  } catch {
+    records = [];
+  }
+
+  return (
+    <div className="flex h-full flex-col justify-between p-5 pt-6 pb-8">
+      <div>
+        <div className="text-xl font-bold text-white mb-1">Flight Records</div>
+        <p className="text-xs text-[#AAB4C3] mb-4">
+          Historical spaceflight mission logs persisted in local storage.
+        </p>
+
+        <div className="space-y-2 overflow-y-auto max-h-96 no-scrollbar">
+          {records.length > 0 ? (
+            records.map((r, i) => (
+              <div key={i} className="card mono text-xs flex justify-between items-center p-2.5">
+                <div>
+                  <b className="text-white">#{i + 1} · {r.date}</b>
+                  <div className="text-[10px] text-[#6F7B8C]">
+                    Sci: {r.sci} · Data: {r.data}GB · HP: {r.health}%
+                  </div>
+                </div>
+                <b className="text-[#00E5FF] text-sm">{r.score} PTS</b>
+              </div>
+            ))
+          ) : (
+            <div className="card text-center text-xs text-[#6F7B8C] py-8">
+              No saved flight records yet. Complete a flight to log your mission!
+            </div>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="btn cursor-pointer mt-4"
+        onClick={onBack}
+      >
+        BACK TO MAIN MENU
+      </button>
+    </div>
+  );
+};
+
+// ============================================================================
+// 13. SCREEN: NASA SCIENCE DOSSIER
+// ============================================================================
+const ScreenNasaDossier: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const [openCard, setOpenCard] = useState<number | null>(null);
+
+  const articles = [
+    {
+      title: 'Tsiolkovsky Rocket Equation',
+      desc: 'Δv = Isp · g₀ · ln(m₀ / m_f)\nGoverns the fundamental velocity change achievable by chemical and ion propulsion systems given propellant mass fraction.',
+    },
+    {
+      title: 'Solar Inverse-Square Law',
+      desc: 'P = P₀ · (1 AU / r)²\nSolar flux drops rapidly as distance from the Sun increases. At 1.25 AU, solar panels generate ~64% of their Earth-orbit nominal power.',
+    },
+    {
+      title: 'Shannon-Hartley Comms Theorem',
+      desc: 'C = B · log₂(1 + S/N)\nDeep space data throughput is limited by antenna gain, transmitting power, and distance attenuation over interplanetary ranges.',
+    },
+    {
+      title: 'Deep Space Network (DSN)',
+      desc: 'NASA ground tracking antennas located 120° apart at Goldstone (USA), Madrid (Spain), and Canberra (Australia) maintain continuous line-of-sight communications.',
+    },
+    {
+      title: 'Asteroid 101955 Bennu (OSIRIS-REx)',
+      desc: 'Primordial B-type carbonaceous near-Earth asteroid. Microgravity rubble-pile composition with active particle plume ejections.',
+    },
+  ];
+
+  return (
+    <div className="flex h-full flex-col justify-between p-5 pt-6 pb-8 overflow-y-auto no-scrollbar">
+      <div>
+        <div className="text-xl font-bold text-white mb-1">NASA Science Dossier</div>
+        <p className="text-xs text-[#AAB4C3] mb-4">
+          Real aerospace physics and astrodynamics formulas utilized by the simulation engine.
+        </p>
+
+        <div className="space-y-2">
+          {articles.map((art, i) => (
+            <div
+              key={art.title}
+              className="card cursor-pointer transition-colors"
+              onClick={() => {
+                playTelemetryClick();
+                setOpenCard(openCard === i ? null : i);
+              }}
+            >
+              <div className="flex justify-between items-center text-xs font-bold text-white">
+                <span>{art.title}</span>
+                <span className="mono text-[#00E5FF]">{openCard === i ? '−' : '+'}</span>
+              </div>
+              {openCard === i && (
+                <pre className="mono mt-2 text-[11px] text-[#AAB4C3] whitespace-pre-wrap pt-2 border-t border-[#293342]/60">
+                  {art.desc}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="btn cursor-pointer mt-4"
+        onClick={onBack}
+      >
+        BACK
+      </button>
+    </div>
+  );
+};
+
+// ============================================================================
+// MODAL & SHEET COMPONENTS
+// ============================================================================
+const Sheet: React.FC<{ children: React.ReactNode; onClose: () => void }> = ({
+  children,
+  onClose,
+}) => (
+  <div className="sheet">
     <div
       className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-[#293342] hover:bg-[#00E5FF] cursor-pointer transition-colors"
       onClick={onClose}
@@ -184,22 +2870,22 @@ export const Sheet: React.FC<{
   </div>
 );
 
-export const Bar: React.FC<{
-  v: number;
-  c?: string;
-  l: string;
-}> = ({ v, c = '#00E5FF', l }) => (
+const ProgressBar: React.FC<{ label: string; value: number; color?: string }> = ({
+  label,
+  value,
+  color = '#00E5FF',
+}) => (
   <div className="mb-2">
     <div className="flex justify-between text-xs text-[#AAB4C3] mono mb-1">
-      <span>{l}</span>
-      <span>{Math.round(v)}%</span>
+      <span>{label}</span>
+      <span>{Math.round(value)}%</span>
     </div>
     <div className="h-2 rounded bg-[#0D111A]">
       <div
         style={{
-          width: `${Math.max(0, Math.min(100, v))}%`,
-          background: c,
-          transition: 'width .5s ease-out',
+          width: `${Math.max(0, Math.min(100, value))}%`,
+          background: color,
+          transition: 'width .4s ease-out',
         }}
         className="h-2 rounded"
       />
@@ -207,11 +2893,103 @@ export const Bar: React.FC<{
   </div>
 );
 
-// Spacecraft Schematic with interactive subsystem pins
-export const Sat: React.FC<{
+const ComponentCompareSheet: React.FC<{
+  subIndex: number;
+  candidateIndex: number;
+  installedIndex: number;
+  onInstall: () => void;
+  onClose: () => void;
+}> = ({ subIndex, candidateIndex, installedIndex, onInstall, onClose }) => {
+  const sub = SUBSYSTEMS[subIndex];
+  const cand = sub.options[candidateIndex];
+  const inst = sub.options[installedIndex];
+
+  return (
+    <Sheet onClose={onClose}>
+      <div className="text-sm font-bold text-white mb-2">COMPARE · {sub.name}</div>
+      <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+        <div className="card p-2 border-[#00E5FF]">
+          <span className="text-[10px] mono text-[#00E5FF] block">CURRENT</span>
+          <b className="text-white text-xs block mb-1">{inst.name}</b>
+          <div className="mono text-[10px] space-y-0.5 text-[#AAB4C3]">
+            <div>Mass: {inst.mass}kg</div>
+            <div>Power: {inst.power}W</div>
+            <div>Cost: ${inst.cost}M</div>
+            <div>Δv: {inst.dv}m/s</div>
+          </div>
+        </div>
+
+        <div className="card p-2 border-[#293342]">
+          <span className="text-[10px] mono text-[#FFAB00] block">CANDIDATE</span>
+          <b className="text-white text-xs block mb-1">{cand.name}</b>
+          <div className="mono text-[10px] space-y-0.5 text-[#AAB4C3]">
+            <div>Mass: {cand.mass}kg</div>
+            <div>Power: {cand.power}W</div>
+            <div>Cost: ${cand.cost}M</div>
+            <div>Δv: {cand.dv}m/s</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <button
+          type="button"
+          className="btn p min-h-[40px] text-xs cursor-pointer"
+          onClick={onInstall}
+        >
+          INSTALL CANDIDATE ({cand.name})
+        </button>
+        <button
+          type="button"
+          className="btn min-h-[40px] text-xs cursor-pointer"
+          onClick={onClose}
+        >
+          CANCEL
+        </button>
+      </div>
+    </Sheet>
+  );
+};
+
+const CrisisTriageModal: React.FC<{
+  crisis: InFlightCrisis;
+  onResolve: (action: 'safe' | 'counter' | 'push') => void;
+}> = ({ crisis, onResolve }) => (
+  <div className="absolute inset-0 z-40 flex items-end bg-black/80 backdrop-blur-sm">
+    <div
+      className="sheet border-[#FF1744] border-2"
+      style={{ animation: 'sheetUp .3s ease-out' }}
+    >
+      <div className="mono mb-1 text-center font-bold text-sm text-[#FF1744] animate-pulse">
+        {crisis.title}
+      </div>
+      <p className="mb-3 text-center text-xs text-[#AAB4C3]">{crisis.desc}</p>
+
+      <div className="space-y-2">
+        {crisis.options.map((opt) => (
+          <button
+            key={opt.action}
+            type="button"
+            className="card w-full text-left p-2.5 cursor-pointer hover:border-[#00E5FF] transition-colors"
+            onClick={() => onResolve(opt.action)}
+          >
+            <b className="text-white text-xs block mb-0.5">{opt.label}</b>
+            <span className="text-[10px] text-[#AAB4C3]">{opt.desc}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+// ============================================================================
+// SVG ASSETS: SPACECRAFT & ASTEROID
+// ============================================================================
+const SpacecraftSvg: React.FC<{
   s?: number;
-  onPin?: (index: number) => void;
-}> = ({ s = 1, onPin }) => (
+  onPin?: (idx: number) => void;
+  activeTab?: number;
+}> = ({ s = 1, onPin, activeTab }) => (
   <svg viewBox="0 0 300 200" width="100%" height="100%" className="overflow-visible select-none">
     <g transform={`translate(150 100) scale(${s})`}>
       {/* Solar Wings */}
@@ -239,26 +3017,33 @@ export const Sat: React.FC<{
         [25, 0, 4],   // 4: Science (Sensor)
         [70, 0, 5],   // 5: Thermal (Radiator)
         [0, 10, 6],   // 6: Navigation (Star tracker)
-        [15, -18, 7]  // 7: Computing (Flight CPU)
+        [15, -18, 7], // 7: Computing (Flight CPU)
       ].map(([x, y, i]) => (
-        <g key={i} className="cursor-pointer" onClick={() => onPin && onPin(i)}>
-          <circle cx={x} cy={y} r="8" fill="#00E5FF" opacity="0.25">
+        <g
+          key={i}
+          className="cursor-pointer"
+          onClick={() => {
+            playTelemetryClick();
+            if (onPin) onPin(i);
+          }}
+        >
+          <circle
+            cx={x}
+            cy={y}
+            r={activeTab === i ? 10 : 8}
+            fill={activeTab === i ? '#00E5FF' : '#00E5FF'}
+            opacity={activeTab === i ? 0.5 : 0.25}
+          >
             <animate attributeName="r" values="6;12;6" dur="2.2s" repeatCount="indefinite" />
           </circle>
-          <circle cx={x} cy={y} r="4.5" fill="#00E5FF">
-            <animate attributeName="opacity" values="0.6;1;0.6" dur="1.5s" repeatCount="indefinite" />
-          </circle>
+          <circle cx={x} cy={y} r="4.5" fill={activeTab === i ? '#FFAB00' : '#00E5FF'} />
         </g>
       ))}
     </g>
   </svg>
 );
 
-// 3D/Interactive Asteroid Sphere with Dynamic Craters
-export const Asteroid: React.FC<{
-  rot: number;
-  size?: number;
-}> = ({ rot, size = 70 }) => (
+const AsteroidSvg: React.FC<{ rot: number; size?: number }> = ({ rot, size = 70 }) => (
   <svg viewBox="-100 -100 200 200" width={size * 2} height={size * 2} className="select-none overflow-visible">
     <defs>
       <radialGradient id="astGrad" cx="30%" cy="30%" r="70%">
@@ -290,1724 +3075,5 @@ export const Asteroid: React.FC<{
     })}
   </svg>
 );
-
-// Context prop type passed to pages
-export interface PageCtx {
-  g: GameState;
-  set: (updater: Partial<GameState> | ((prev: GameState) => GameState)) => void;
-  go: (page: number) => void;
-  T: SubsystemTotals;
-  phase: string;
-}
-
-// ----------------------------------------------------
-// PAGE 1: LANDING
-// ----------------------------------------------------
-export const Landing: React.FC<PageCtx> = ({ set, go }) => (
-  <div className="flex h-full flex-col items-center justify-between p-6 pt-16 pb-8">
-    <div className="fl h-48 w-64 flex items-center justify-center">
-      <Sat />
-    </div>
-    <div className="text-center my-auto">
-      <div className="text-[28px] font-bold tracking-tight text-[#F3F6FA]">MISSION: LAST LIGHT</div>
-      <div className="mono mt-2 text-xs tracking-widest text-[#00E5FF]">DESIGN. STRESS-TEST. ADAPT. SURVIVE.</div>
-      <div className="mt-3 text-xs text-[#AAB4C3] max-w-xs mx-auto">
-        A scientifically grounded aerospace mission simulator. Every design decision creates flight consequences.
-      </div>
-    </div>
-    <div className="w-full space-y-3 pb-4">
-      <Btn p={true} set={set} onClick={() => go(3)}>START MISSION</Btn>
-      <Btn set={set} onClick={() => set({ how: true })}>HOW TO PLAY</Btn>
-      <Btn set={set} onClick={() => go(20)}>NASA DATA</Btn>
-    </div>
-  </div>
-);
-
-// ----------------------------------------------------
-// PAGE 2: HOW TO PLAY (TUTORIAL SHEET)
-// ----------------------------------------------------
-export const How: React.FC<PageCtx> = ({ set, go }) => {
-  const [i, setI] = useState(0);
-  const [touchStartX, setTouchStartX] = useState(0);
-
-  const cs = [
-    ['Design Spacecraft', 'Pick components across 8 subsystems. Balance mass, power, cost, and reliability.'],
-    ['Manage Trade-Offs', 'Mass, power, budget, and delta-v are constantly in tension. No component is free.'],
-    ['Stress Test', 'Simulate space hazards (storms, failures, debris) before authorizing launch.'],
-    ['Command Flight', 'Execute trajectory burns, observe telemetry, manage power, and stream science data.'],
-    ['Complete Mission', 'Safely rendezvous with ASTERIA-1, survey its surface, and downlink vital data.']
-  ];
-
-  return (
-    <div
-      onTouchStart={(e) => setTouchStartX(e.touches[0].clientX)}
-      onTouchEnd={(e) => {
-        const diff = e.changedTouches[0].clientX - touchStartX;
-        if (diff < -40) setI((prev) => Math.min(4, prev + 1));
-        if (diff > 40) setI((prev) => Math.max(0, prev - 1));
-      }}
-      className="select-none"
-    >
-      <div className="card mb-3 h-64 flex flex-col items-center justify-center text-center p-6">
-        <div className="mono text-[#00E5FF] text-xs font-semibold tracking-wider">{i + 1} / 5</div>
-        <div className="mt-4 text-2xl font-bold text-white">{cs[i][0]}</div>
-        <p className="mt-3 text-sm text-[#AAB4C3] leading-relaxed">{cs[i][1]}</p>
-        <div className="mt-auto text-[11px] text-[#6F7B8C] mono">swipe ◂ ▸ or tap indicators</div>
-      </div>
-
-      <div className="mb-4 flex justify-center gap-2">
-        {cs.map((_, k) => (
-          <button
-            key={k}
-            type="button"
-            className="h-2 rounded-full transition-all"
-            style={{
-              width: k === i ? '24px' : '8px',
-              background: k === i ? '#00E5FF' : '#293342'
-            }}
-            onClick={() => setI(k)}
-          />
-        ))}
-      </div>
-
-      <div className="grid gap-2">
-        <Btn p={true} set={set} onClick={() => { set({ how: false }); go(3); }}>
-          START TUTORIAL
-        </Btn>
-        <Btn set={set} onClick={() => set({ how: false })}>
-          SKIP
-        </Btn>
-      </div>
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 3: MISSION BRIEFING
-// ----------------------------------------------------
-export const Brief: React.FC<PageCtx> = ({ set, go }) => {
-  const [ck, setCk] = useState([true, false, false, false]);
-  const [showConstraints, setShowConstraints] = useState(true);
-
-  const ob = [
-    'Rendezvous with ASTERIA-1',
-    'Collect 60+ science points',
-    'Return 15+ GB of data',
-    'Keep health above 40%'
-  ];
-
-  return (
-    <div className="p-4 pb-28 relative min-h-full">
-      <div className="mb-3 flex justify-center pt-2">
-        <svg viewBox="-60 -60 120 120" width="130" height="130">
-          <g className="sp">
-            <circle r="48" fill="none" stroke="#00E5FF" strokeWidth="1.5" />
-            <ellipse rx="48" ry="16" fill="none" stroke="#00E5FF" strokeWidth="1" opacity="0.6" />
-            <ellipse rx="16" ry="48" fill="none" stroke="#00E5FF" strokeWidth="1" opacity="0.6" />
-          </g>
-          <circle cx="0" cy="0" r="8" fill="#FFAB00" />
-        </svg>
-      </div>
-
-      <div className="mono mb-3 text-center text-xs font-semibold text-[#00E5FF]">
-        ASTERIA-1 · Ø 1.2 km · 146 d transit
-      </div>
-
-      <div className="card mb-3">
-        <div className="mb-2 text-sm font-bold text-white tracking-wide">MISSION OBJECTIVES</div>
-        {ob.map((t, i) => (
-          <label key={i} className="flex min-h-[44px] items-center gap-3 text-sm cursor-pointer border-b border-[#293342]/40 last:border-none py-1">
-            <input
-              type="checkbox"
-              className="h-5 w-5 rounded accent-[#00E5FF]"
-              checked={!!ck[i]}
-              onChange={() => setCk(ck.map((v, k) => (k === i ? !v : v)))}
-            />
-            <span className="text-[#F3F6FA]">
-              <b className={i < 2 ? 'text-[#00E5FF]' : 'text-[#AAB4C3]'}>
-                {i < 2 ? 'Primary: ' : 'Secondary: '}
-              </b>
-              {t}
-            </span>
-          </label>
-        ))}
-      </div>
-
-      <div className="card mb-4">
-        <div
-          className="flex min-h-[40px] items-center justify-between font-bold text-sm cursor-pointer"
-          onClick={() => setShowConstraints(!showConstraints)}
-        >
-          <span>FLIGHT CONSTRAINTS</span>
-          <span className="mono text-base text-[#00E5FF]">{showConstraints ? '−' : '+'}</span>
-        </div>
-        {showConstraints && (
-          <div className="mono text-xs text-[#AAB4C3] space-y-1.5 pt-2 border-t border-[#293342]/60 mt-1">
-            <div className="flex justify-between"><span>Dry Mass Limit:</span><b className="text-white">≤ 2500 kg</b></div>
-            <div className="flex justify-between"><span>Mission Budget:</span><b className="text-white">≤ $50M</b></div>
-            <div className="flex justify-between"><span>Power Generation:</span><b className="text-white">≤ 100 W Bus Load</b></div>
-          </div>
-        )}
-      </div>
-
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#080B12] via-[#080B12] to-transparent">
-        <Btn p={true} set={set} onClick={() => go(4)}>ACCEPT MISSION</Btn>
-      </div>
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 4: SETUP (PRIORITIES)
-// ----------------------------------------------------
-export const Setup: React.FC<PageCtx> = ({ g, set, go }) => {
-  const L = ['LOW', 'MED', 'HIGH'];
-  const rows: [string, 's' | 'v' | 'a'][] = [
-    ['SCIENCE PRIORITY', 's'],
-    ['SURVIVABILITY', 'v'],
-    ['AFFORDABILITY', 'a']
-  ];
-
-  return (
-    <div className="p-4 pb-24 relative min-h-full">
-      <div className="mb-4 mt-4 text-xl font-bold text-white tracking-tight">Mission Priorities</div>
-      <p className="text-xs text-[#AAB4C3] mb-4">
-        Calibrate your flight doctrine. High science demands more payload mass, while survivability requires thermal shielding and radiation tolerance.
-      </p>
-
-      {rows.map(([t, k]) => (
-        <div key={k} className="card mb-3">
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-sm font-medium">{t}</span>
-            <b className="mono text-[#00E5FF] text-xs font-bold">{L[g.pri[k]]}</b>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="2"
-            value={g.pri[k]}
-            onChange={(e) => set({ pri: { ...g.pri, [k]: +e.target.value } })}
-            className="my-1"
-          />
-          <div className="mono flex justify-between text-[10px] text-[#6F7B8C]">
-            <span>LOW</span>
-            <span>MED</span>
-            <span>HIGH</span>
-          </div>
-        </div>
-      ))}
-
-      <div className="absolute bottom-4 left-4 right-4">
-        <Btn p={true} set={set} onClick={() => go(5)}>CONTINUE TO DESIGN</Btn>
-      </div>
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 5 & 6: DESIGN STUDIO & COMPARE SHEET
-// ----------------------------------------------------
-export const Design: React.FC<PageCtx> = ({ g, set, go, T }) => {
-  const cat = C[g.tab];
-  const inst = g.inst[g.tab] || 0;
-  const fl = g.flash || {};
-
-  const badge = (k: string, v: string | number, u: string) => {
-    const delta = fl[k];
-    return (
-      <div className="pill mono text-[11px] gap-1">
-        <span className="text-[#AAB4C3]">{k}</span>
-        <b className={delta && delta > 0 ? 'up bl' : delta && delta < 0 ? 'dn bl' : 'text-white'}>
-          {v}{u}
-        </b>
-        {delta !== undefined && delta !== 0 && (
-          <span className={delta > 0 ? 'up' : 'dn'}>
-            {delta > 0 ? `+${delta}` : delta}
-          </span>
-        )}
-      </div>
-    );
-  };
-
-  const install = (i: number) => {
-    const a = cat[1][inst];
-    const b = cat[1][i];
-    playSuccessChime();
-    set({
-      inst: { ...g.inst, [g.tab]: i },
-      cmp: null,
-      page: 5,
-      flash: {
-        Mass: b[1] - a[1],
-        Power: b[2] - a[2],
-        '$M': b[3] - a[3],
-        'Δv': b[4] - a[4]
-      }
-    });
-  };
-
-  const cmpOpen = g.page === 6;
-
-  return (
-    <div className="flex h-full flex-col relative select-none">
-      {/* Top telemetry and spacecraft schematic */}
-      <div className="flex-none p-3 pb-0" style={{ height: '38%' }}>
-        <div className="flex flex-wrap gap-1.5 justify-between mb-2">
-          {badge('Mass', T.m, 'kg')}
-          {badge('Power', T.p, 'W')}
-          {badge('$M', (42 - T.b).toFixed(0), 'M')}
-          {badge('Δv', T.d, 'm/s')}
-        </div>
-        <div className="h-[76%] flex items-center justify-center">
-          <Sat onPin={(i) => set({ tab: i })} />
-        </div>
-      </div>
-
-      {/* Subsystem category horizontal pills */}
-      <div className="flex flex-none gap-2 overflow-x-auto px-3 pb-2 no-scrollbar">
-        {C.map(([n], i) => (
-          <button
-            key={n}
-            type="button"
-            onClick={() => {
-              playTelemetryClick();
-              set({ tab: i });
-            }}
-            className="pill min-h-[38px] whitespace-nowrap text-xs font-semibold cursor-pointer transition-colors"
-            style={{
-              borderColor: i === g.tab ? '#00E5FF' : '#293342',
-              color: i === g.tab ? '#00E5FF' : '#AAB4C3',
-              background: i === g.tab ? '#00E5FF1a' : '#0D111Acc'
-            }}
-          >
-            {n}
-          </button>
-        ))}
-      </div>
-
-      {/* Component Options List */}
-      <div className="flex-1 space-y-2 overflow-y-auto px-3 pb-24 no-scrollbar">
-        {cat[1].map((c, i) => (
-          <div
-            key={i}
-            className="card transition-all"
-            style={{ borderColor: i === inst ? '#00E5FF' : '#293342' }}
-          >
-            <div className="flex justify-between items-center">
-              <b className="text-white text-sm">{c[0]}</b>
-              <span className="mono text-xs text-[#AAB4C3]">
-                {c[1]}kg · {c[2]}W · ${c[3]}M
-              </span>
-            </div>
-            <div className="my-1.5 text-xs text-[#6F7B8C]">{c[6]}</div>
-            <div className="flex gap-2 mt-2">
-              <div className="flex-1">
-                <Btn
-                  p={i !== inst}
-                  set={set}
-                  onClick={() => install(i)}
-                  className="text-xs min-h-[40px]"
-                >
-                  {i === inst ? 'INSTALLED' : 'INSTALL'}
-                </Btn>
-              </div>
-              <div className="flex-1">
-                <Btn
-                  set={set}
-                  onClick={() => set({ page: 6, cmp: i })}
-                  className="text-xs min-h-[40px]"
-                >
-                  COMPARE
-                </Btn>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Bottom Sticky Action */}
-      <div className="absolute bottom-3 left-3 right-3 z-10">
-        <Btn p={true} set={set} onClick={() => go(7)}>MISSION READINESS</Btn>
-      </div>
-
-      {/* Compare Modal Sheet (Page 6) */}
-      {cmpOpen && (
-        <Sheet onClose={() => go(5)}>
-          <div className="mb-3 font-bold text-base text-white">COMPARE · {cat[0]}</div>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            {[inst, g.cmp == null ? 1 : g.cmp].map((ix, k) => {
-              const c = cat[1][ix];
-              const b = cat[1][inst];
-              return (
-                <div key={k} className="card p-2.5">
-                  <b className="text-[#00E5FF] text-xs block mb-2">{c[0]}</b>
-                  {[
-                    ['Mass', c[1], b[1], 1, 'kg'],
-                    ['Power', c[2], b[2], 1, 'W'],
-                    ['Cost', c[3], b[3], 1, '$M'],
-                    ['Δv', c[4], b[4], -1, 'm/s'],
-                    ['Reliab.', c[5], b[5], -1, '%']
-                  ].map(([n, v, w, s, u]) => {
-                    const diff = (+v - +w) * +s;
-                    return (
-                      <div key={n} className="mono text-[11px] mb-1 flex justify-between items-center">
-                        <span className="text-[#AAB4C3]">{n}:</span>
-                        <span className="text-white font-medium">
-                          {v}{u}
-                          {k !== 0 && diff !== 0 && (
-                            <span
-                              className={`ml-1 rounded px-1 text-[9px] font-bold ${
-                                diff < 0 ? 'bg-[#00E67633] dn' : 'bg-[#FF174433] up'
-                              }`}
-                            >
-                              {diff < 0 ? 'ADV' : 'PEN'}
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-4 grid gap-2">
-            <Btn p={true} set={set} onClick={() => install(g.cmp == null ? 1 : g.cmp)}>
-              INSTALL THIS
-            </Btn>
-            <Btn set={set} onClick={() => go(5)}>
-              CANCEL
-            </Btn>
-          </div>
-        </Sheet>
-      )}
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 7: READINESS
-// ----------------------------------------------------
-export const Ready: React.FC<PageCtx> = ({ g, set, go, T }) => {
-  const eng = g.mode === 'ENGINEER';
-  const r = T.r;
-  const risk =
-    (g.inst[3] || 0) === 0
-      ? 'COMMUNICATION CAPACITY'
-      : T.p > 90
-      ? 'POWER MARGIN'
-      : 'THERMAL RESILIENCE';
-  const col = r >= 80 ? '#00E676' : r >= 60 ? '#FFAB00' : '#FF1744';
-
-  return (
-    <div className="p-4 pb-24 relative min-h-full">
-      <div className="flex items-center justify-between">
-        <div className="text-lg font-bold text-white">Flight Readiness</div>
-        <button
-          type="button"
-          className="pill min-h-[38px] text-xs font-semibold cursor-pointer border-[#00E5FF] text-[#00E5FF]"
-          onClick={() => {
-            playTelemetryClick();
-            set({ mode: eng ? 'COMMANDER' : 'ENGINEER' });
-          }}
-        >
-          MODE: {g.mode}
-        </button>
-      </div>
-
-      {/* Circular Gauge */}
-      <div className="my-4 flex justify-center">
-        <svg viewBox="0 0 120 120" width="160" height="160">
-          <circle cx="60" cy="60" r="50" fill="none" stroke="#293342" strokeWidth="10" />
-          <circle
-            cx="60"
-            cy="60"
-            r="50"
-            fill="none"
-            stroke={col}
-            strokeWidth="10"
-            strokeDasharray={`${(r * 3.14).toFixed(1)} 314`}
-            transform="rotate(-90 60 60)"
-            strokeLinecap="round"
-            style={{ transition: 'all .6s ease-out' }}
-          />
-          <text
-            x="60"
-            y="68"
-            textAnchor="middle"
-            fill="#F3F6FA"
-            fontSize="26"
-            className="mono font-bold"
-          >
-            {r}%
-          </text>
-        </svg>
-      </div>
-
-      <div className="card mb-3 bl border-[#FFAB00] text-[#FFAB00] text-xs font-bold text-center">
-        ⚠ PRIMARY RISK: {risk}
-      </div>
-
-      <Bar l="Power System Margin" v={100 - T.p + 20} c="#00E676" />
-      <Bar l="Communications Link" v={60 + (g.inst[3] ? 35 : 0)} />
-      <Bar l="Thermal Shielding" v={55 + (g.inst[5] ? 35 : 0)} />
-      <Bar l="Propulsion (Δv Available)" v={T.d / 20} />
-      <Bar l="Hardware Reliability" v={r} />
-      <Bar l="Budget Reserve" v={T.b * 2} c="#FFAB00" />
-
-      {eng && (
-        <div className="card mono text-xs text-[#AAB4C3] mt-3 space-y-1">
-          <div>Δv: {T.d} m/s · Isp 3000 s</div>
-          <div>Mass: {T.m} kg · Power {T.p}/100 W</div>
-          <div>Link: {g.inst[3] ? '4.8' : '2.4'} Mbps @ 1.2 AU, margin {g.inst[3] ? '+6.1' : '+1.8'} dB</div>
-        </div>
-      )}
-
-      <div className="absolute bottom-4 left-4 right-4">
-        <Btn p={true} set={set} onClick={() => go(8)}>CONTINUE TO STRESS TEST</Btn>
-      </div>
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 8: STRESS TEST
-// ----------------------------------------------------
-const SC = [
-  ['Solar Storm', 30],
-  ['Comms Failure', 15],
-  ['Thermal Stress', 22],
-  ['Micrometeoroid', 26],
-  ['Radiation Belt', 20],
-  ['Power Dip', 18],
-  ['Dust Cloud', 12],
-  ['Eclipse Soak', 10],
-] as const;
-
-export const Stress: React.FC<PageCtx> = ({ g, set, go, T }) => {
-  const [sel, setSel] = useState(0);
-  const [st, setSt] = useState<{ beam?: number; drop?: number; res?: number }>({});
-
-  const run = () => {
-    playWarningAlert();
-    setSt({ beam: 1 });
-    setTimeout(() => {
-      setSt((s) => ({ ...s, drop: 1 }));
-    }, 400);
-    setTimeout(() => {
-      setSt((s) => ({ ...s, res: 1 }));
-    }, 1400);
-  };
-
-  const s =
-    T.r -
-    SC[sel][1] +
-    ((g.inst[5] || 0) && sel === 2 ? 10 : 0) +
-    ((g.inst[7] || 0) && sel === 0 ? 8 : 0);
-
-  const res =
-    s >= 70
-      ? 'SURVIVES NOMINAL'
-      : s >= 48
-      ? 'SURVIVES WITH DEGRADATION'
-      : 'CRITICAL FAILURE';
-  const dmg = Math.max(4, Math.round((92 - s) / 2));
-
-  return (
-    <div className="p-4 pb-24 relative min-h-full">
-      <div className="relative mb-3 h-40 overflow-hidden rounded-xl bg-[#0D111A] flex items-center justify-center">
-        <Sat s={0.8} />
-        {st.beam && (
-          <div
-            className="absolute inset-0 bl pointer-events-none"
-            style={{
-              background: 'linear-gradient(90deg, transparent, #FF174488, transparent)'
-            }}
-          />
-        )}
-      </div>
-
-      <Bar l="POWER SYSTEM" v={st.drop ? 100 - dmg : 100} c="#FFAB00" />
-      <Bar l="SPACECRAFT HEALTH" v={st.drop ? 100 - dmg * 1.3 : 100} c="#00E676" />
-
-      <div className="my-3 grid grid-cols-2 gap-2">
-        {SC.map(([n], i) => (
-          <button
-            key={n}
-            type="button"
-            className="card min-h-[52px] text-xs font-semibold cursor-pointer text-left transition-colors"
-            style={{
-              borderColor: i === sel ? '#00E5FF' : '#293342',
-              color: i === sel ? '#00E5FF' : '#F3F6FA'
-            }}
-            onClick={() => {
-              playTelemetryClick();
-              setSel(i);
-              setSt({});
-            }}
-          >
-            {n}
-          </button>
-        ))}
-      </div>
-
-      <div className="absolute bottom-4 left-4 right-4">
-        <Btn p={true} set={set} onClick={run}>RUN TEST</Btn>
-      </div>
-
-      {st.res && (
-        <Sheet onClose={() => setSt({})}>
-          <div className={`mono mb-1 text-xs font-bold ${s >= 48 ? 'text-[#FFAB00]' : 'up'}`}>
-            TEST RESULT
-          </div>
-          <div className="mb-1 text-lg font-bold text-white">{res}</div>
-          <div className="mb-3 text-sm text-[#AAB4C3]">
-            {SC[sel][0]}: est. {dmg}% damage. Hazard score {Math.round(s)}.
-          </div>
-          <div className="grid gap-2">
-            <Btn set={set} onClick={() => go(5)}>REDESIGN</Btn>
-            <Btn set={set} onClick={() => { setSt({}); setTimeout(run, 50); }}>RUN AGAIN</Btn>
-            <Btn p={true} set={set} onClick={() => go(9)}>LAUNCH ANYWAY</Btn>
-          </div>
-        </Sheet>
-      )}
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 9: LAUNCH COUNTDOWN
-// ----------------------------------------------------
-export const Launch: React.FC<PageCtx> = ({ g, set, go, T }) => {
-  const [n, setN] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (n === null) return;
-    if (n < 0) {
-      playSuccessChime();
-      set({
-        toast: 'MISSION CONTROL: ASTERIA-1 is now in space.',
-        fuel: 85,
-        health: 100
-      });
-      const t = setTimeout(() => {
-        set({ page: 10, day: 1 });
-      }, 1200);
-      return () => clearTimeout(t);
-    }
-    if (n === 0) {
-      playThrusterPulse();
-    } else {
-      playTelemetryClick();
-    }
-    const t = setTimeout(() => setN(n - 1), n === 0 ? 1500 : 800);
-    return () => clearTimeout(t);
-  }, [n, set]);
-
-  if (n !== null) {
-    return (
-      <div className="flex h-full items-center justify-center bg-black relative overflow-hidden select-none">
-        {n > 0 ? (
-          <div key={n} className="pg mono text-[130px] font-bold text-[#00E5FF]">
-            {n}
-          </div>
-        ) : n === 0 ? (
-          <div className="flex flex-col items-center">
-            <div className="mono text-center text-4xl text-[#FFAB00] font-extrabold tracking-wider animate-bounce">
-              IGNITION
-            </div>
-            {Array.from({ length: 16 }, (_, i) => (
-              <span
-                key={i}
-                className="absolute h-10 w-1 rounded bg-[#FFAB00]"
-                style={{
-                  left: 140 + i * 8,
-                  top: 0,
-                  animation: `rk ${0.9 + (i % 4) * 0.15}s linear infinite`,
-                  animationDelay: `${i * 0.04}s`,
-                }}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="mono text-2xl font-bold text-[#00E676] animate-pulse">
-            IN ORBIT
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full flex-col justify-between p-5 pt-16 pb-8 select-none">
-      <div className="text-center text-2xl font-bold text-white tracking-wide">
-        LAUNCH AUTHORIZATION
-      </div>
-      <div className="space-y-3">
-        <div className="card flex justify-between items-center">
-          <span className="text-sm">Readiness Score</span>
-          <b className="mono text-[#00E5FF] text-base">{T.r}%</b>
-        </div>
-        <div className="card flex justify-between items-center">
-          <span className="text-sm">Δv Margin Reserve</span>
-          <b className="mono text-[#00E676] text-base">+{T.d - 1199} m/s</b>
-        </div>
-        <div className="card flex justify-between items-center">
-          <span className="text-sm">Primary Monitored Risk</span>
-          <b className="text-[#FFAB00] text-sm">
-            {(g.inst[3] || 0) ? 'Solar Storm' : 'Comms Capacity'}
-          </b>
-        </div>
-      </div>
-      <Btn p={true} set={set} onClick={() => setN(10)}>
-        CONFIRM LAUNCH
-      </Btn>
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 10: FLIGHT DASHBOARD & TRAJECTORY MAP
-// ----------------------------------------------------
-export const Dash: React.FC<PageCtx> = ({ g, set, go, phase }) => {
-  const sh = g.page > 10 && g.page <= 15 ? g.page : null;
-  const [pan, setPan] = useState<[number, number]>([0, 0]);
-  const [z, setZ] = useState(1);
-  const [drag, setDrag] = useState<[number, number] | null>(null);
-  const [sw, setSw] = useState(false);
-  const [pulse, setPulse] = useState(false);
-  const [txv, setTxv] = useState<number | null>(null);
-
-  const t = g.day / 146;
-  const bz = (a: number, b: number, c: number, progress: number) =>
-    (1 - progress) * (1 - progress) * a + 2 * (1 - progress) * progress * b + progress * progress * c;
-
-  const cp = g.mtab > 0 && g.mtab < 3 ? [260, 120] : [200, 420];
-  const sx = bz(80, cp[0] * 0.8, 310, t);
-  const sy = bz(300, cp[1], 200, t);
-
-  const eg = g.pw.science >= 70;
-  const close = () => set({ page: 10 });
-  const win = g.day % 30 < 20;
-
-  const doTx = () => {
-    if (!win) return set({ toast: 'No communication window available' });
-    if (g.data <= 0.1) return set({ toast: 'Transmission queue empty' });
-
-    playTelemetryClick();
-    const amt = g.data;
-    let v = amt;
-    setTxv(amt);
-    const iv = setInterval(() => {
-      v -= amt / 12;
-      if (v <= 0) {
-        clearInterval(iv);
-        playSuccessChime();
-        set((o) => ({
-          data: 0,
-          ret: o.ret + amt,
-          tx: o.tx + 1,
-          toast: `+${amt.toFixed(1)} GB Transmitted`
-        }));
-        setTxv(null);
-      } else {
-        setTxv(v);
-      }
-    }, 120);
-  };
-
-  const scan = (n: string) => {
-    if (g.safe) return set({ toast: 'Safe mode active — instruments offline' });
-    if (g.data + 2.8 > 32) return set({ toast: 'Data storage full — transmit first' });
-
-    playTelemetryClick();
-    setSw(true);
-    setTimeout(() => {
-      setSw(false);
-      playSuccessChime();
-      set((o) => ({
-        sci: o.sci + 8,
-        data: o.data + 2.8,
-        toast: `+8 Science Points / +2.8 GB Data (${n})`
-      }));
-    }, 1600);
-  };
-
-  const exec = () => {
-    if (g.fuel < 8) return set({ toast: 'Insufficient propellant' });
-    playThrusterPulse();
-    setPulse(true);
-    setTimeout(() => setPulse(false), 700);
-    set({ fuel: g.fuel - 8, toast: 'Burn complete: −84 m/s, −120 kg' });
-  };
-
-  const storm = (c: 'safe' | 'sci' | 'power') => {
-    const sh2 = (g.inst[5] || 0) + (g.inst[7] || 0);
-    if (c === 'safe') {
-      playTelemetryClick();
-      set({
-        safe: true,
-        stormDone: true,
-        stormChoice: 'safe',
-        page: 10,
-        toast: 'Safe mode: computer protected, power reduced'
-      });
-    } else if (c === 'sci') {
-      playWarningAlert();
-      set({
-        stormDone: true,
-        stormChoice: 'sci',
-        sci: g.sci + 12,
-        data: Math.min(32, g.data + 4),
-        health: g.health - (sh2 ? 18 : 34),
-        page: 10,
-        toast: 'Extra data gathered — damage taken'
-      });
-    } else {
-      playTelemetryClick();
-      set({
-        stormDone: true,
-        stormChoice: 'power',
-        pw: { science: 10, comms: 20, computing: 25, thermal: 45 },
-        health: g.health - (sh2 ? 4 : 12),
-        page: 10,
-        toast: 'Power redistributed to thermal'
-      });
-    }
-  };
-
-  const dock: [string, string, () => void][] = [
-    ['⌖', 'MANEUVER', () => set({ page: 11 })],
-    ['◉', 'OBSERVE', () => set({ page: 14 })],
-    ['⚡', 'POWER', () => set({ page: 12 })],
-    ['📡', 'COMMS', () => set({ page: 13 })],
-    ['⚗', 'SCIENCE', () => set({ page: 14 })],
-    ['⛨', 'SAFE MODE', () => set({ safe: !g.safe, toast: g.safe ? 'Safe mode off' : 'Safe mode on' })]
-  ];
-
-  return (
-    <div className="relative h-full overflow-hidden select-none">
-      {/* Top HUD status bar */}
-      <div className="absolute left-0 right-0 top-0 z-10 flex items-center gap-1 p-3 pt-3 bg-gradient-to-b from-[#080B12] via-[#080B12]/80 to-transparent">
-        <div className="pill mono font-bold text-[10px] text-[#00E5FF]">{phase}</div>
-        <div className="pill mono text-[10px]">Day {g.day}/146</div>
-        <div className={`pill mono text-[10px] ${eg ? 'bl text-[#FFAB00]' : 'text-[#00E676]'}`}>
-          THERM {eg ? 'WARN' : 'OK'}
-        </div>
-        <div className="flex-1" />
-        {[1, 5, 20, 100].map((s) => (
-          <button
-            key={s}
-            type="button"
-            className="pill min-h-[30px] px-2 text-[10px] font-mono cursor-pointer"
-            style={{
-              color: g.speed === s ? '#00E5FF' : '#AAB4C3',
-              borderColor: g.speed === s ? '#00E5FF' : '#293342',
-              background: g.speed === s ? '#00E5FF22' : '#0D111Acc'
-            }}
-            onClick={() => {
-              playTelemetryClick();
-              set({ speed: s });
-            }}
-          >
-            {s}X
-          </button>
-        ))}
-      </div>
-
-      {/* Interactive Orbit Map Canvas */}
-      <svg
-        viewBox="0 0 393 560"
-        className="absolute inset-0 h-full w-full touch-none"
-        style={{ marginTop: 30 }}
-        onPointerDown={(e) => setDrag([e.clientX, e.clientY])}
-        onPointerMove={(e) => {
-          if (drag) {
-            setPan([pan[0] + e.clientX - drag[0], pan[1] + e.clientY - drag[1]]);
-            setDrag([e.clientX, e.clientY]);
-          }
-        }}
-        onPointerUp={() => setDrag(null)}
-        onPointerLeave={() => setDrag(null)}
-      >
-        <g transform={`translate(${pan[0]} ${pan[1]}) scale(${z})`}>
-          {/* Deep space starfield */}
-          {Array.from({ length: 32 }, (_, i) => (
-            <circle
-              key={i}
-              cx={(i * 97) % 393}
-              cy={(i * 61) % 560}
-              r={i % 3 ? 0.9 : 1.5}
-              fill="#fff"
-              opacity="0.45"
-            />
-          ))}
-
-          {/* Trajectory Arc */}
-          <path
-            d={`M80 300 Q ${cp[0] * 0.8} ${cp[1]} 310 200`}
-            fill="none"
-            stroke="#00E676"
-            strokeWidth="2"
-            strokeDasharray="6 4"
-            opacity="0.75"
-          />
-
-          {/* Earth Body */}
-          <circle cx="80" cy="300" r="34" fill="#12467a" stroke="#00E5FF" strokeWidth="1.5" />
-          <circle cx="80" cy="300" r="38" fill="none" stroke="#00E5FF" strokeWidth="0.5" opacity="0.4" />
-          <text x="80" y="348" fill="#AAB4C3" fontSize="10" textAnchor="middle" className="mono">
-            EARTH
-          </text>
-
-          {/* Target ASTERIA-1 */}
-          <g className="cursor-pointer" onClick={() => go(16)}>
-            <circle cx="310" cy="200" r="16" fill="#3a3f4b" stroke="#AAB4C3" strokeWidth="1.5" />
-            <circle cx="310" cy="200" r="22" fill="none" stroke="#00E5FF" strokeWidth="1" strokeDasharray="3 3">
-              <animate attributeName="r" values="20;26;20" dur="3s" repeatCount="indefinite" />
-            </circle>
-            <text x="310" y="234" fill="#AAB4C3" fontSize="10" textAnchor="middle" className="mono">
-              ASTERIA-1
-            </text>
-          </g>
-
-          {/* Spacecraft marker */}
-          <g transform={`translate(${sx} ${sy})`}>
-            <circle
-              r={pulse ? 20 : 8}
-              fill={pulse ? '#FFAB0055' : '#00E5FF'}
-              style={{ transition: 'r .3s ease-out' }}
-            />
-            <rect x="-4" y="-4" width="8" height="8" fill="#F3F6FA" rx="1" />
-            {sw && (
-              <path
-                d="M0 0 L120 -45 A128 128 0 0 1 120 45 Z"
-                fill="#00E5FF"
-                opacity="0.25"
-                style={{ transformOrigin: '0 0', animation: 'sw 1.6s ease-in-out' }}
-              />
-            )}
-          </g>
-        </g>
-      </svg>
-
-      {/* Zoom controls */}
-      <div className="absolute right-3 top-20 z-10 flex flex-col gap-1.5">
-        <button
-          type="button"
-          className="pill min-h-[40px] min-w-[40px] cursor-pointer text-base font-bold text-white"
-          onClick={() => setZ(Math.min(2.5, z + 0.25))}
-        >
-          ＋
-        </button>
-        <button
-          type="button"
-          className="pill min-h-[40px] min-w-[40px] cursor-pointer text-base font-bold text-white"
-          onClick={() => setZ(Math.max(0.6, z - 0.25))}
-        >
-          －
-        </button>
-      </div>
-
-      {/* Left HUD Telemetry */}
-      <div className="absolute left-3 top-20 z-10 flex flex-col gap-1.5">
-        {[
-          ['Power', '1.82 kW'],
-          ['Fuel', `${Math.round(g.fuel * 15.1)} kg`],
-          ['Health', `${Math.round(g.health)}%`],
-          ['Data', `${(txv ?? g.data).toFixed(1)} GB`],
-        ].map(([k, v]) => (
-          <div key={k} className="pill mono text-[10px]">
-            <span className="text-[#AAB4C3] mr-1">{k}:</span>
-            <b className="text-[#00E5FF]">{v}</b>
-          </div>
-        ))}
-      </div>
-
-      {/* Bottom 6-icon Docking Navigation Bar */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 grid grid-cols-6 gap-1 border-t border-[#293342] bg-[#0D111Aee] backdrop-blur-md p-2 pb-5">
-        {dock.map(([i, l, f]) => (
-          <button
-            key={l}
-            type="button"
-            onClick={() => {
-              playTelemetryClick();
-              f();
-            }}
-            className="min-h-[52px] rounded-lg text-center active:scale-95 transition-transform cursor-pointer"
-            style={{
-              color: l === 'SAFE MODE' && g.safe ? '#FFAB00' : '#F3F6FA'
-            }}
-          >
-            <div className="text-lg leading-tight">{i}</div>
-            <div className="text-[7.5px] tracking-tight font-semibold mt-0.5">{l}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* SHEET 11: MANEUVER */}
-      {sh === 11 && (
-        <Sheet onClose={close}>
-          <div className="mb-2 flex gap-1">
-            {['Course Correction', 'Approach Burn', 'Rendezvous Burn'].map((n, i) => (
-              <button
-                key={n}
-                type="button"
-                className="pill min-h-[38px] flex-1 text-[9.5px] cursor-pointer"
-                style={{
-                  color: g.mtab === i ? '#00E5FF' : '#AAB4C3',
-                  borderColor: g.mtab === i ? '#00E5FF' : '#293342',
-                  background: g.mtab === i ? '#00E5FF22' : '#0D111Acc'
-                }}
-                onClick={() => set({ mtab: i })}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-          <div className="card mono mb-3 text-xs space-y-1">
-            <div>
-              Miss distance: {[42000, 18000, 6000][g.mtab].toLocaleString()} km ➔{' '}
-              <b className="dn">{[2100, 900, 300][g.mtab].toLocaleString()} km</b>
-            </div>
-            <div>Δv cost: <b className="up">−84 m/s</b></div>
-            <div>Propellant: <b className="up">−120 kg</b></div>
-          </div>
-          <Btn p={true} set={set} onClick={exec}>EXECUTE MANEUVER</Btn>
-        </Sheet>
-      )}
-
-      {/* SHEET 12: POWER MANAGEMENT */}
-      {sh === 12 && (
-        <Sheet onClose={close}>
-          <div className="mb-2 font-bold text-white text-sm">POWER MANAGEMENT</div>
-          {(['science', 'comms', 'computing', 'thermal'] as const).map((k) => (
-            <div key={k} className="mb-2">
-              <div className="mono flex justify-between text-xs text-[#AAB4C3] mb-0.5">
-                <span>{k.toUpperCase()}</span>
-                <span className="text-[#00E5FF] font-bold">{g.pw[k]}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={g.pw[k]}
-                onChange={(e) => set({ pw: { ...g.pw, [k]: +e.target.value } })}
-              />
-            </div>
-          ))}
-          <div className="mono mb-2 text-xs text-[#AAB4C3]">
-            Total {Object.values(g.pw).reduce((a, b) => a + b, 0)}% (normalized on apply)
-          </div>
-          <Btn
-            p={true}
-            set={set}
-            onClick={() => {
-              const s = Object.values(g.pw).reduce((a, b) => a + b, 0) || 1;
-              const n: any = {};
-              for (const k in g.pw) {
-                n[k] = Math.round(((g.pw as any)[k] * 100) / s);
-              }
-              set({ pw: n, page: 10, toast: 'Power configuration applied' });
-            }}
-          >
-            APPLY POWER CONFIGURATION
-          </Btn>
-        </Sheet>
-      )}
-
-      {/* SHEET 13: COMMUNICATIONS */}
-      {sh === 13 && (
-        <Sheet onClose={close}>
-          <div className="mb-2 font-bold text-white text-sm">COMMUNICATIONS DOWNLINK</div>
-          <svg viewBox="0 0 340 50" className="w-full my-1">
-            <circle cx="15" cy="25" r="8" fill="#00E5FF" />
-            <circle cx="325" cy="25" r="8" fill="#00E676" />
-            <path
-              d="M25 25 Q 60 5 95 25 T 165 25 T 235 25 T 305 25"
-              fill="none"
-              stroke="#00E5FF"
-              strokeDasharray="4 3"
-            >
-              <animate attributeName="stroke-dashoffset" values="14;0" dur="1s" repeatCount="indefinite" />
-            </path>
-            {txv != null &&
-              [0, 1, 2, 3, 4].map((i) => (
-                <circle key={i} r="4" cy="25" fill="#00E5FF">
-                  <animate
-                    attributeName="cx"
-                    values="20;320"
-                    dur="1s"
-                    begin={`${i * 0.2}s`}
-                    repeatCount="indefinite"
-                  />
-                </circle>
-              ))}
-          </svg>
-          <div className="mono my-2 grid grid-cols-2 gap-2 text-xs">
-            <div className="card py-1.5 px-2">Signal: <b className="text-[#00E5FF]">{win ? 'STRONG' : 'NONE'}</b></div>
-            <div className="card py-1.5 px-2">Rate: <b className="text-[#00E5FF]">{g.inst[3] ? '4.8' : '2.4'} Mbps</b></div>
-            <div className="card py-1.5 px-2">Latency: <b className="text-[#00E5FF]">{((g.day / 146) * 8 + 4).toFixed(1)} min</b></div>
-            <div className="card py-1.5 px-2">Window: <b className={win ? 'text-[#00E676]' : 'text-[#FF1744]'}>{win ? 'OPEN' : 'CLOSED'}</b></div>
-          </div>
-          <Bar
-            l={`Queue ${(txv ?? g.data).toFixed(1)} GB / 32 GB`}
-            v={((txv ?? g.data) / 32) * 100}
-          />
-          <Btn
-            p={true}
-            dis={!win}
-            why="No communication window available"
-            set={set}
-            onClick={doTx}
-          >
-            TRANSMIT NOW
-          </Btn>
-        </Sheet>
-      )}
-
-      {/* SHEET 14: SCIENCE OPERATIONS */}
-      {sh === 14 && (
-        <Sheet onClose={close}>
-          <div className="mb-2 font-bold text-white text-sm">SCIENCE OPERATIONS</div>
-          {[
-            ['Camera', '4W · 20s'],
-            ['Spectrometer', '9W · 45s'],
-            ['Radar', '14W · 60s'],
-            ['Thermal Sensor', '6W · 30s'],
-          ].map(([n, c]) => (
-            <div key={n} className="card mb-2 flex items-center justify-between gap-2 p-2">
-              <div>
-                <b className="text-white text-xs">{n}</b>
-                <div className="mono text-[10px] text-[#6F7B8C]">{c}</div>
-              </div>
-              <div className="w-32">
-                <Btn p={true} set={set} onClick={() => scan(n)} className="min-h-[36px] text-xs">
-                  EXECUTE SCAN
-                </Btn>
-              </div>
-            </div>
-          ))}
-          <Btn
-            set={set}
-            dis={g.day < 110}
-            why="Asteroid not yet in range (Day 110+ required)"
-            onClick={() => go(16)}
-            className="mt-1"
-          >
-            SURFACE SURVEY
-          </Btn>
-        </Sheet>
-      )}
-
-      {/* SHEET 15: HIGH ALERT SOLAR STORM */}
-      {sh === 15 && (
-        <div className="absolute inset-0 z-30 flex items-end bg-black/70">
-          <div
-            className="sheet bl border-[#FF1744] border-2"
-            style={{ animation: 'sheetUp .3s ease-out' }}
-          >
-            <div className="mono mb-1 text-center font-bold up text-sm">
-              HIGH ALERT: SOLAR STORM DETECTED
-            </div>
-            <p className="mb-3 text-center text-xs text-[#AAB4C3]">
-              Dangerous proton flux spike incoming. Take immediate action to protect the spacecraft bus.
-            </p>
-            <div className="grid gap-2">
-              <Btn set={set} onClick={() => storm('safe')}>
-                SAFE MODE (PROTECT CPU)
-              </Btn>
-              <Btn set={set} onClick={() => storm('sci')}>
-                CONTINUE SCIENCE (TAKE DAMAGE)
-              </Btn>
-              <Btn set={set} onClick={() => storm('power')}>
-                REDISTRIBUTE POWER (PROTECT THERMAL)
-              </Btn>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 16: ROCK (ASTEROID SURFACE SURVEY)
-// ----------------------------------------------------
-export const Rock: React.FC<PageCtx> = ({ g, set, go }) => {
-  const [rot, setRot] = useState(0);
-  const [dragX, setDragX] = useState<number | null>(null);
-  const [pin, setPin] = useState<string | null>(null);
-  const pins = ['Region A', 'Region B', 'Region C'];
-
-  return (
-    <div className="flex h-full flex-col items-center p-4 pt-10 pb-8 select-none">
-      <div className="mono mb-2 text-[#00E5FF] text-sm font-bold tracking-wider">
-        ASTERIA-1 · SURFACE MAPPING
-      </div>
-      <div
-        className="touch-none cursor-grab flex items-center justify-center my-auto"
-        onPointerDown={(e) => setDragX(e.clientX)}
-        onPointerMove={(e) => {
-          if (dragX != null) {
-            setRot((r) => r + (e.clientX - dragX) / 60);
-            setDragX(e.clientX);
-          }
-        }}
-        onPointerUp={() => setDragX(null)}
-        onPointerLeave={() => setDragX(null)}
-        style={{ position: 'relative', width: 280, height: 280 }}
-      >
-        <Asteroid rot={rot} size={140} />
-        {pins.map((p, i) => {
-          const a = i * 2.1 + rot;
-          if (Math.cos(a) <= 0) return null;
-          return (
-            <button
-              key={p}
-              type="button"
-              className="pill absolute min-h-[40px] min-w-[40px] text-xs font-bold border-[#00E5FF] text-[#00E5FF] cursor-pointer shadow-lg active:scale-95"
-              style={{
-                left: 140 + Math.sin(a) * 95 - 20,
-                top: 120 + i * 28 - 20,
-                background: '#0D111Aee'
-              }}
-              onClick={() => {
-                playTelemetryClick();
-                setPin(p);
-              }}
-            >
-              {p.slice(-1)}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mono text-xs text-[#6F7B8C] mb-4">drag to rotate · tap a pin to inspect</div>
-
-      <div className="mt-auto w-full">
-        <Btn set={set} onClick={() => go(10)}>BACK TO FLIGHT</Btn>
-      </div>
-
-      {pin && (
-        <Sheet onClose={() => setPin(null)}>
-          <div className="mb-1 font-bold text-white text-sm">{pin}</div>
-          <p className="mb-3 text-xs text-[#AAB4C3]">
-            High-reflectance regolith with strong olivine signatures. Est. +10 science yield.
-          </p>
-          <Btn
-            p={true}
-            set={set}
-            dis={g.data + 1.2 > 32}
-            why="Data storage full — transmit first"
-            onClick={() => {
-              playSuccessChime();
-              set({
-                sci: g.sci + 10,
-                data: g.data + 1.2,
-                surveys: g.surveys + 1,
-                toast: '+10 Science / +1.2 GB Data'
-              });
-              setPin(null);
-            }}
-          >
-            SCAN TARGET
-          </Btn>
-        </Sheet>
-      )}
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 17: RESULT
-// ----------------------------------------------------
-export const Result: React.FC<PageCtx> = ({ g, set, go, T }) => {
-  const win = g.health >= 40 && g.sci >= 30;
-
-  return (
-    <div className="p-4 pb-36 relative min-h-full select-none">
-      <div
-        className="mx-auto mb-4 mt-8 w-fit rounded-full px-6 py-2 font-bold text-sm tracking-wide"
-        style={{
-          background: win ? '#00E67622' : '#FFAB0022',
-          color: win ? '#00E676' : '#FFAB00',
-          border: '1px solid',
-          borderColor: win ? '#00E676' : '#FFAB00'
-        }}
-      >
-        {win ? 'MISSION COMPLETE' : 'MISSION FAILED'}
-      </div>
-
-      {[
-        ['Science Gathered', `${g.sci} pts`],
-        ['Data Returned to Earth', `${g.ret.toFixed(1)} GB`],
-        ['Final Spacecraft Health', `${Math.round(Math.max(0, g.health))}%`],
-        ['Total Project Cost', `$${(42 - T.b).toFixed(0)}M`],
-        ['Flight Duration', `${g.day} Days`],
-      ].map(([k, v]) => (
-        <div key={k} className="card mono mb-2 flex justify-between text-xs">
-          <span className="text-[#AAB4C3]">{k}</span>
-          <b className="text-[#00E5FF]">{v}</b>
-        </div>
-      ))}
-
-      {!win && (
-        <div className="card text-xs mt-3 border-[#FFAB00]">
-          <b className="text-[#FFAB00]">Cause & Effect Analysis:</b>
-          <p className="mt-1 text-[#AAB4C3]">
-            {g.health < 40
-              ? 'Solar storm flux and thermal stresses degraded bus health below survival margin.'
-              : 'Science payload fell short of the 30-point threshold. Scans and downlinks were insufficient.'}
-          </p>
-        </div>
-      )}
-
-      <div className="absolute bottom-0 left-0 right-0 grid gap-2 bg-[#080B12] p-4">
-        <Btn p={true} set={set} onClick={() => go(18)}>
-          VIEW CINEMATIC DEBRIEF
-        </Btn>
-        <Btn set={set} onClick={() => set({ ...init, page: 5, inst: {} })}>
-          RETRY MISSION
-        </Btn>
-      </div>
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 18: CINEMATIC DEBRIEF
-// ----------------------------------------------------
-export const Debrief: React.FC<PageCtx> = ({ g, T }) => {
-  const [n, setN] = useState(0);
-  const st = g.stormChoice;
-
-  const N = [
-    [
-      'Launch',
-      `Launched at ${T.r}% readiness`,
-      'Your design set the margins you flew with.',
-      `Δv margin ${T.d - 1199} m/s and ${T.p} W load defined every later option.`,
-      'Constraints stayed tight, so every burn mattered.'
-    ],
-    [
-      'Solar Storm',
-      st === 'safe'
-        ? 'Entered Safe Mode'
-        : st === 'sci'
-        ? 'Kept running science'
-        : st === 'power'
-        ? 'Redistributed power to thermal'
-        : 'No storm decision recorded',
-      'Flux spiked on Day 90 as foreshadowed.',
-      st === 'safe'
-        ? 'Hardware protected, but science paused.'
-        : st === 'sci'
-        ? 'Extra data gathered, but heavy structural damage.'
-        : 'Moderate damage, preserved critical systems.',
-      `Health ended at ${Math.round(g.health)}%.`
-    ],
-    [
-      'Rendezvous',
-      `${g.surveys} surface surveys completed`,
-      'Close approach opened regional scan targets.',
-      'Surface imaging generated high-yield science telemetry.',
-      `Science total: ${g.sci} pts.`
-    ],
-    [
-      'Transmission',
-      `${g.tx} downlinks completed`,
-      'Data only counts toward mission success when it reaches Earth.',
-      'Windows open 20 of every 30 days; antenna selection sets data throughput.',
-      `${g.ret.toFixed(1)} GB returned.`
-    ]
-  ];
-
-  const x = N[n];
-
-  return (
-    <div className="flex h-full flex-col select-none">
-      <div className="flex h-[20%] items-center gap-6 overflow-x-auto px-6 no-scrollbar">
-        {N.map((a, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => {
-              playTelemetryClick();
-              setN(i);
-            }}
-            className="flex-none text-center cursor-pointer"
-          >
-            <div
-              className="mx-auto h-8 w-8 rounded-full bg-[#151B26] transition-all"
-              style={{
-                boxShadow:
-                  i === n
-                    ? '0 0 0 3px #00E5FF, 0 0 18px #00E5FF'
-                    : 'none',
-                borderColor: i === n ? '#00E5FF' : '#293342',
-                borderWidth: 1
-              }}
-            />
-            <div className="mono mt-2 text-[10px] text-white font-semibold">{a[0]}</div>
-          </button>
-        ))}
-      </div>
-      <div className="h-[80%] space-y-2 overflow-y-auto p-4 no-scrollbar">
-        {['Your Decision', 'What Happened', 'Why It Happened', 'Mission Consequence'].map((t, i) => (
-          <div key={t} className="card">
-            <div className="mono text-[10px] text-[#00E5FF] font-bold">{t.toUpperCase()}</div>
-            <div className="text-xs text-[#F3F6FA] mt-1">{x[i + 1]}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 19: LEADERBOARD / RECORDS
-// ----------------------------------------------------
-export const Board: React.FC<PageCtx> = () => {
-  const [t, setT] = useState(0);
-  let a: any[] = [];
-  try {
-    a = JSON.parse(localStorage.getItem('ll_rec') || '[]');
-  } catch {
-    a = [];
-  }
-
-  const key = ['sci', 'hp', 'cost'][t] as 'sci' | 'hp' | 'cost';
-  const arr = [...a].sort((p, q) => (t === 2 ? p.cost - q.cost : q[key] - p[key]));
-
-  return (
-    <div className="p-4 select-none">
-      <div className="mb-3 mt-4 text-xl font-bold text-white tracking-tight">Mission Records</div>
-      <div className="mb-3 flex gap-1">
-        {['Science Hunter', 'Survival Expert', 'Engineering Master'].map((n, i) => (
-          <button
-            key={n}
-            type="button"
-            className="pill min-h-[40px] flex-1 text-[9.5px] cursor-pointer"
-            style={{
-              color: t === i ? '#00E5FF' : '#AAB4C3',
-              borderColor: t === i ? '#00E5FF' : '#293342',
-              background: t === i ? '#00E5FF22' : '#0D111Acc'
-            }}
-            onClick={() => {
-              playTelemetryClick();
-              setT(i);
-            }}
-          >
-            {n}
-          </button>
-        ))}
-      </div>
-      {arr.length ? (
-        arr.map((r, i) => (
-          <div key={i} className="card mono mb-2 flex justify-between text-xs">
-            <span>#{i + 1} · {new Date(r.t).toLocaleDateString()}</span>
-            <span className="text-[#00E5FF]">
-              Sci {r.sci} · HP {Math.round(r.hp)}% · ${r.cost}M
-            </span>
-          </div>
-        ))
-      ) : (
-        <div className="card text-xs text-[#6F7B8C] text-center py-8">
-          No saved missions yet. Complete a flight to log your mission record!
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// PAGE 20: NASA DATA & SCIENCE
-// ----------------------------------------------------
-export const Nasa: React.FC<PageCtx> = ({ set, go }) => {
-  const [o, setO] = useState<number | null>(null);
-
-  const it = [
-    ['JPL Horizons', 'Ephemerides for solar-system bodies, spacecraft trajectories, and asteroid orbits.'],
-    ['Small-Body Database', 'High-precision orbital elements and physical properties for asteroids and comets.'],
-    ['Tsiolkovsky Rocket Equation', 'Δv = Isp · g₀ · ln(m₀ / m_f)\nRelates propellant mass ratio and specific impulse to available velocity change.'],
-    ['Delta-v Budget', 'Δv_total = Σ Δv_burns + margin\nSum course corrections, approach and rendezvous burns, then allocate reserve margin.'],
-    ['Solar Inverse-Square Law', 'P = P₀ · (1 AU / r)²\nAvailable solar energy decreases quadratically with distance from the Sun.']
-  ];
-
-  return (
-    <div className="p-4 pb-20 select-none">
-      <div className="mb-3 mt-4 text-xl font-bold text-white tracking-tight">NASA Data & Science</div>
-      {it.map(([n, d], i) => (
-        <div
-          key={n}
-          className="card mb-2 cursor-pointer transition-colors"
-          onClick={() => {
-            playTelemetryClick();
-            setO(o === i ? null : i);
-          }}
-        >
-          <div className="flex min-h-[32px] justify-between items-center font-bold text-sm text-white">
-            <span>{n}</span>
-            <span className="mono text-[#00E5FF] text-base">{o === i ? '−' : '+'}</span>
-          </div>
-          {o === i && (
-            <pre className="mono mt-2 whitespace-pre-wrap text-xs text-[#AAB4C3] border-t border-[#293342]/60 pt-2 font-mono">
-              {d}
-            </pre>
-          )}
-        </div>
-      ))}
-      <div className="mt-4">
-        <Btn set={set} onClick={() => go(1)}>BACK TO TITLE</Btn>
-      </div>
-    </div>
-  );
-};
-
-// ----------------------------------------------------
-// MAIN APP COMPONENT
-// ----------------------------------------------------
-export const App: React.FC = () => {
-  const [g, S] = useState<GameState>(init);
-  const set = (p: Partial<GameState> | ((prev: GameState) => GameState)) =>
-    S((o) => ({ ...o, ...(typeof p === 'function' ? p(o) : p) }));
-  const go = (page: number) => {
-    playTelemetryClick();
-    set({ page });
-  };
-
-  const T = tot(g.inst);
-  const phase =
-    g.day < 5
-      ? 'LAUNCH'
-      : g.day < 60
-      ? 'CRUISE'
-      : g.day < 110
-      ? 'APPROACH'
-      : g.day < 130
-      ? 'RENDEZVOUS'
-      : g.day < 146
-      ? 'SCIENCE'
-      : 'DEBRIEF';
-
-  // Responsive scale and screen adaptation
-  const [sc, setSc] = useState(1);
-  const [isMobileScreen, setIsMobileScreen] = useState(false);
-  const [isMuted, setIsMutedState] = useState(isAudioMuted());
-
-  useEffect(() => {
-    const handleResize = () => {
-      const isMobile = window.innerWidth <= 640;
-      setIsMobileScreen(isMobile);
-      if (!isMobile) {
-        setSc(Math.min(1, (window.innerHeight - 80) / 852, (window.innerWidth - 30) / 393));
-      } else {
-        setSc(1);
-      }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Toast timeout
-  useEffect(() => {
-    if (g.toast) {
-      const t = setTimeout(() => set({ toast: null }), 2600);
-      return () => clearTimeout(t);
-    }
-  }, [g.toast]);
-
-  // Flash badge timeout
-  useEffect(() => {
-    if (g.flash) {
-      const t = setTimeout(() => set({ flash: null }), 1500);
-      return () => clearTimeout(t);
-    }
-  }, [g.flash]);
-
-  // Autonomous flight simulation loop
-  useEffect(() => {
-    if (g.page !== 10) return;
-    const t = setInterval(() => {
-      S((o) => {
-        if (o.page !== 10) return o;
-        let nd = Math.min(146, o.day + o.speed);
-        const ev: [number, string][] = [
-          [60, 'Solar activity increasing'],
-          [75, 'Flare precursors detected on solar limb']
-        ];
-        let toast = o.toast;
-        for (const [d, m] of ev) {
-          if (o.day < d && d <= nd) {
-            nd = d;
-            toast = m;
-          }
-        }
-        if (!o.stormDone && o.day < 90 && 90 <= nd) {
-          playWarningAlert();
-          return { ...o, day: 90, page: 15 };
-        }
-        if (nd >= 146) {
-          playSuccessChime();
-          return { ...o, day: 146, page: 17 };
-        }
-        return {
-          ...o,
-          day: nd,
-          toast,
-          data: Math.min(32, o.data + 0.05 * o.speed)
-        };
-      });
-    }, 600);
-    return () => clearInterval(t);
-  }, [g.page]);
-
-  // Persist record on result
-  useEffect(() => {
-    if (g.page === 17) {
-      try {
-        const a = JSON.parse(localStorage.getItem('ll_rec') || '[]');
-        a.unshift({
-          sci: g.sci,
-          hp: g.health,
-          cost: +(42 - T.b + 42).toFixed(0),
-          ret: g.ret,
-          t: Date.now()
-        });
-        localStorage.setItem('ll_rec', JSON.stringify(a.slice(0, 20)));
-      } catch {
-        // Ignore localStorage error
-      }
-    }
-  }, [g.page]);
-
-  const ctx: PageCtx = { g, set, go, T, phase };
-
-  const pages: Record<number, React.FC<PageCtx>> = {
-    1: Landing,
-    3: Brief,
-    4: Setup,
-    5: Design,
-    6: Design,
-    7: Ready,
-    8: Stress,
-    9: Launch,
-    16: Rock,
-    17: Result,
-    18: Debrief,
-    19: Board,
-    20: Nasa,
-  };
-
-  const CurrentPageComponent = pages[g.page] || Dash;
-
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen min-h-[100dvh] bg-[#05070c] py-1 select-none">
-      {/* Dev Controls Header (visible on desktop or can be toggled) */}
-      {!isMobileScreen && (
-        <div className="mb-2 flex items-center gap-2 z-50">
-          <select
-            className="rounded bg-[#151B26] px-3 py-1.5 text-xs mono text-[#00E5FF] border border-[#293342] cursor-pointer"
-            value={g.page}
-            onChange={(e) => go(+e.target.value)}
-          >
-            {Array.from({ length: 20 }, (_, i) => (
-              <option key={i} value={i + 1}>
-                DEV · Page {String(i + 1).padStart(2, '0')}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="rounded bg-[#151B26] px-3 py-1.5 text-xs mono text-[#AAB4C3] border border-[#293342] cursor-pointer hover:text-white"
-            onClick={() => {
-              const muted = toggleAudio();
-              setIsMutedState(muted);
-            }}
-          >
-            {isMuted ? '🔇 MUTED' : '🔊 AUDIO'}
-          </button>
-        </div>
-      )}
-
-      {/* Mobile Device Frame Container */}
-      <div
-        style={
-          isMobileScreen
-            ? { width: '100%', height: '100dvh', maxHeight: '100vh' }
-            : { width: 393 * sc, height: 852 * sc }
-        }
-      >
-        <div
-          className={`relative overflow-hidden ${
-            isMobileScreen
-              ? 'w-full h-full'
-              : 'rounded-[38px] border border-[#293342] shadow-[0_0_80px_#00e5ff22]'
-          }`}
-          style={
-            isMobileScreen
-              ? { background: 'linear-gradient(#080B12, #0D111A)' }
-              : {
-                  width: 393,
-                  height: 852,
-                  background: 'linear-gradient(#080B12, #0D111A)',
-                  transform: `scale(${sc})`,
-                  transformOrigin: 'top left',
-                }
-          }
-        >
-          {/* Simulated Mobile Status Notch on Desktop */}
-          {!isMobileScreen && (
-            <div className="absolute top-0 left-0 right-0 z-40 flex justify-between items-center px-6 pt-2 pointer-events-none">
-              <span className="mono text-[10px] text-[#AAB4C3]">NASA 12:00</span>
-              <div className="h-4 w-28 bg-[#05070C] rounded-full mx-auto" />
-              <span className="mono text-[10px] text-[#00E5FF]">5G ■■■</span>
-            </div>
-          )}
-
-          {/* Active Screen View */}
-          <div
-            key={g.page >= 10 && g.page <= 15 ? 10 : g.page}
-            className="pg absolute inset-0 overflow-y-auto no-scrollbar"
-            style={{ paddingTop: isMobileScreen ? 'env(safe-area-inset-top, 0px)' : '16px' }}
-          >
-            <CurrentPageComponent {...ctx} />
-          </div>
-
-          {/* How to Play Modal Sheet */}
-          {g.how && (
-            <Sheet onClose={() => set({ how: false })}>
-              <How {...ctx} />
-            </Sheet>
-          )}
-
-          {/* Safe Mode Alert Hazard Overlay */}
-          {g.safe && (
-            <div
-              className="pointer-events-none absolute inset-0 z-40"
-              style={{
-                background:
-                  'repeating-linear-gradient(0deg, #ffab0020 0 2px, transparent 2px 6px), #ffab0012',
-                boxShadow: 'inset 0 0 60px #FFAB0066',
-              }}
-            >
-              <div className="mono absolute top-2 w-full text-center text-[10px] font-bold text-[#FFAB00] tracking-widest">
-                SAFE MODE ACTIVE
-              </div>
-            </div>
-          )}
-
-          {/* Toast Notification Pill */}
-          {g.toast && (
-            <div className="mono absolute left-4 right-4 top-8 z-50 rounded-xl border border-[#00E5FF] bg-[#0D111Aee] backdrop-blur-md p-3 text-center text-xs text-[#F3F6FA] shadow-[0_0_20px_#00e5ff44]">
-              {g.toast}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export default App;
