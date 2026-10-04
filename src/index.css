@@ -42,8 +42,10 @@ body {
   background: var(--void);
   color: var(--ink);
   font: 500 14px/1.4 var(--f-b);
-  padding-inline: 16px;
-  overflow: hidden;
+  padding: 0;
+  margin: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -150,20 +152,45 @@ canvas.stars {
 .page {
   position: absolute;
   inset: 0;
-  padding: 84px 40px 34px;
+  padding: 76px 40px 32px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line2) transparent;
 }
 
 .page.full {
   padding-top: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.page::-webkit-scrollbar {
+  width: 6px;
+}
+
+.page::-webkit-scrollbar-track {
+  background: rgba(4, 7, 13, 0.4);
+}
+
+.page::-webkit-scrollbar-thumb {
+  background: var(--line2);
+  border-radius: 3px;
+}
+
+.page::-webkit-scrollbar-thumb:hover {
+  background: var(--cyan);
 }
 
 .pg-wrap {
   position: absolute;
   inset: 0;
   will-change: transform, opacity;
+  overflow: hidden;
 }
 
 /* HUD */
@@ -173,12 +200,14 @@ canvas.stars {
   right: 0;
   top: 0;
   height: 64px;
-  z-index: 5;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  background: linear-gradient(180deg, rgba(4, 7, 13, .92), rgba(4, 7, 13, 0));
+  background: linear-gradient(180deg, rgba(4, 7, 13, 0.98) 0%, rgba(4, 7, 13, 0.92) 80%, rgba(4, 7, 13, 0) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   font-family: var(--f-m);
 }
 

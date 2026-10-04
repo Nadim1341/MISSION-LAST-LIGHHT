@@ -1201,12 +1201,12 @@ function P3() {
         sub="Reach the asteroid ASTERIA-1 and bring its data home before the light fades."
         right={<div className="pill cy">SIMULATED / GAME DATA</div>}
       />
-      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
-        <div className="panel rise col" style={{ ...ri(1), width: 430, alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ position: 'relative', width: 260, height: 260, marginTop: 6 }}>
-            <Asteria size={260} scan={true} />
+      <div className="row gap20" style={{ alignItems: 'flex-start', flexShrink: 0 }}>
+        <div className="panel rise col" style={{ ...ri(1), width: 400, alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+          <div style={{ position: 'relative', width: 210, height: 210, marginTop: 4 }}>
+            <Asteria size={210} scan={true} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', width: '100%' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px', width: '100%' }}>
             {[
               ['DIAMETER', 412, 'm', 0],
               ['SPIN PERIOD', 7.2, 'h', 1],
@@ -1215,14 +1215,14 @@ function P3() {
             ].map(([l, v, u, dd]) => (
               <div key={l as string}>
                 <div className="lab">{l as string}</div>
-                <div className="mono" style={{ fontSize: 22, fontWeight: 600 }}>
+                <div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>
                   <Num v={v as number} d={dd as number} start={0} dur={1400} /> <small className="dim">{u as string}</small>
                 </div>
               </div>
             ))}
           </div>
         </div>
-        <div className="col gap grow">
+        <div className="col gap grow" style={{ minWidth: 0 }}>
           <div className="col gap8">
             <div className="lab rise" style={ri(2)}>Objectives · tap to acknowledge</div>
             {OBJ.map(([t, s], n) => {
@@ -1273,7 +1273,7 @@ function P3() {
           </div>
         </div>
       </div>
-      <div className="row between rise" style={ri(10)}>
+      <div className="row between rise" style={{ ...ri(10), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 20 }}>
         <Btn k="secondary" icon="back" onClick={() => go(1)}>Back</Btn>
         <Btn glow icon="chev" onClick={() => go(4)}>Accept mission</Btn>
       </div>
@@ -1392,7 +1392,7 @@ function P4() {
           </div>
         </div>
       </div>
-      <div className="row between rise" style={ri(6)}>
+      <div className="row between rise" style={{ ...ri(6), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <Btn k="secondary" icon="back" onClick={() => go(3)}>Back</Btn>
         <Btn glow icon="chev" onClick={() => go(5)}>Continue to design</Btn>
       </div>
@@ -1516,7 +1516,7 @@ function P5() {
           {!overM && !overB && !lowDv && <div className="banner ok">WITHIN ALL LIMITS</div>}
         </div>
       </div>
-      <div className="row between rise" style={ri(5)}>
+      <div className="row between rise" style={{ ...ri(5), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <Btn k="secondary" icon="back" onClick={() => go(4)}>Back</Btn>
         <Btn glow={!overM && !overB} disabled={overM || overB} icon="lock" onClick={lock}>
           Lock design · stress test
@@ -1659,7 +1659,7 @@ function P6() {
           </div>
         </div>
       </div>
-      <div className="row between rise" style={ri(5)}>
+      <div className="row between rise" style={{ ...ri(5), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <Btn k="secondary" icon="back" disabled={run} onClick={() => go(5)}>
           {result === 'FAIL' ? 'Retry in designer' : 'Back to designer'}
         </Btn>
@@ -2021,7 +2021,7 @@ function P9() {
           </div>
         </div>
       </div>
-      <div className="row between rise" style={ri(4)}>
+      <div className="row between rise" style={{ ...ri(4), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <Btn k="secondary" icon="back" onClick={() => go(8)}>Back to cruise</Btn>
         <div className="row gap">
           {S.cruise < 60 && <span className="mono dim" style={{ fontSize: 12 }}>ANOMALY WINDOW AT 60% · NOW {Math.round(S.cruise)}%</span>}
@@ -2522,7 +2522,7 @@ function P12() {
           </div>
         </div>
       </div>
-      <div className="row between rise" style={ri(3)}>
+      <div className="row between rise" style={{ ...ri(3), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <span className="mono dim" style={{ fontSize: 12 }}>
           {ph === 'idle' ? 'READY FOR FINAL APPROACH' : ph === 'run' ? 'DOCKING IN PROGRESS' : ''}
         </span>
@@ -2644,7 +2644,7 @@ function P13() {
           </div>
         </div>
       </div>
-      <div className="row between rise" style={ri(3)}>
+      <div className="row between rise" style={{ ...ri(3), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <span className="mono dim" style={{ fontSize: 12 }}>Scans add heat. Science power sets yield.</span>
         <Btn glow icon="chev" onClick={() => go(14)}>Data management</Btn>
       </div>
@@ -2758,7 +2758,7 @@ function P14() {
           </div>
         </div>
       </div>
-      <div className="row between rise" style={ri(5)}>
+      <div className="row between rise" style={{ ...ri(5), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <Btn k="secondary" icon="back" onClick={() => go(13)}>Back to science</Btn>
         <Btn glow icon="chev" onClick={() => go(15)}>Power management</Btn>
       </div>
@@ -2872,7 +2872,7 @@ function P15() {
           </div>
         </div>
       </div>
-      <div className="row between rise" style={ri(4)}>
+      <div className="row between rise" style={{ ...ri(4), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <Btn k="secondary" icon="back" onClick={() => go(14)}>Back to data</Btn>
         <Btn glow icon="chev" onClick={() => go(16)}>Communications</Btn>
       </div>
@@ -2991,7 +2991,7 @@ function P16() {
           {S.dataQueue > 0 && <div className="banner">{S.dataQueue.toFixed(1)} GB STILL ONBOARD, NOT STAGED</div>}
         </div>
       </div>
-      <div className="row between rise" style={ri(3)}>
+      <div className="row between rise" style={{ ...ri(3), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <Btn k="secondary" icon="back" onClick={() => { setTx(false); go(14); }}>Back to data</Btn>
         <Btn glow={S.txBuffer <= 0.01} k={S.txBuffer > 0.01 ? 'danger' : 'primary'} icon="warn" onClick={() => { setTx(false); go(17); }}>
           Proceed to crisis window
@@ -3127,7 +3127,7 @@ function P17() {
           )}
         </div>
       </div>
-      <div className="row between rise" style={ri(5)}>
+      <div className="row between rise" style={{ ...ri(5), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <span className="mono dim" style={{ fontSize: 12 }}>{pick == null ? 'NO DECISION IN TIME MEANS THE WORST OUTCOME' : ''}</span>
         <Btn glow={pick != null} k={pick != null && S.health <= 0 ? 'danger' : 'primary'} icon="chev" disabled={pick == null} onClick={() => go(18)}>
           Assess damage
@@ -3319,7 +3319,7 @@ function P19() {
           </div>
         </div>
       </div>
-      <div className="row between rise" style={ri(5)}>
+      <div className="row between rise" style={{ ...ri(5), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <div className="row gap">
           <Btn k="secondary" icon="refresh" onClick={retry}>Retry · new design</Btn>
           <Btn k="secondary" icon="back" onClick={restart}>Restart</Btn>
@@ -3422,7 +3422,7 @@ function P20() {
           </div>
         </div>
       </div>
-      <div className="row between rise" style={ri(4)}>
+      <div className="row between rise" style={{ ...ri(4), flexShrink: 0, marginTop: 'auto', paddingTop: 16, paddingBottom: 24 }}>
         <Btn k="secondary" icon="back" onClick={() => go(19)}>Back to debrief</Btn>
         <Btn glow icon="refresh" onClick={restart}>New mission</Btn>
       </div>
