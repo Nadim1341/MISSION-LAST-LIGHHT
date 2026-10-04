@@ -1,3079 +1,3661 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+  useContext,
+  createContext,
+  memo
+} from 'react';
 import {
   playTelemetryClick,
   playSuccessChime,
   playWarningAlert,
   playThrusterPulse,
   isAudioMuted,
-  toggleAudio,
+  toggleAudio
 } from './utils/audio.ts';
 
 // ============================================================================
-// SCIENTIFIC & ENGINEERING SUBSYSTEM CATALOG
+// TYPES & INTERFACES
 // ============================================================================
-export interface ComponentOption {
+
+export interface Part {
   id: string;
   name: string;
-  mass: number;        // kg delta
-  power: number;       // W delta (positive = draw, negative = generation)
-  cost: number;        // $M cost
-  dv: number;          // m/s delta-V contribution
-  rel: number;         // Reliability % delta
-  radTol: number;      // krad tolerance
+  mass: number;
+  cost: number;
   desc: string;
-  spec: string;
+  [key: string]: any;
 }
 
-export interface SubsystemCategory {
-  id: string;
-  name: string;
-  icon: string;
-  options: ComponentOption[];
-}
-
-export const SUBSYSTEMS: SubsystemCategory[] = [
-  {
-    id: 'structure',
-    name: 'Structure',
-    icon: '🏗️',
-    options: [
-      {
-        id: 'struct_al_frame',
-        name: 'Al-6061 Semi-Monocoque',
-        mass: 0,
-        power: 0,
-        cost: 0,
-        dv: 0,
-        rel: 0,
-        radTol: 30,
-        desc: 'Standard aerospace aluminium truss bus. Rugged baseline.',
-        spec: 'Density 2.7g/cm³ · Modulus 69 GPa'
-      },
-      {
-        id: 'struct_carbon_truss',
-        name: 'Carbon-Composite Truss',
-        mass: -65,
-        power: 0,
-        cost: 4.5,
-        dv: 35,
-        rel: 2,
-        radTol: 45,
-        desc: 'Ultra-light carbon fiber honeycomb bus. Cuts dry mass.',
-        spec: 'Mass -65kg · High thermal stability'
-      },
-      {
-        id: 'struct_whipple_shield',
-        name: 'Whipple Debris Bumper',
-        mass: 42,
-        power: 0,
-        cost: 3.2,
-        dv: -15,
-        rel: 6,
-        radTol: 60,
-        desc: 'Multi-layer hypervelocity shield. Absorbs micrometeoroid hits.',
-        spec: 'Deflects particles up to 12 km/s'
-      }
-    ]
-  },
-  {
-    id: 'propulsion',
-    name: 'Propulsion',
-    icon: '🚀',
-    options: [
-      {
-        id: 'prop_ion_standard',
-        name: 'NSTAR Ion Thruster',
-        mass: 0,
-        power: 0,
-        cost: 0,
-        dv: 0,
-        rel: 0,
-        radTol: 50,
-        desc: 'Electrostatic xenon ion engine. High specific impulse.',
-        spec: 'Isp 3100s · Thrust 92 mN · Pwr 2.1 kW'
-      },
-      {
-        id: 'prop_hall_xl',
-        name: 'Hall Effect Thruster XL',
-        mass: 48,
-        power: 14,
-        cost: 6.2,
-        dv: 140,
-        rel: 1,
-        radTol: 60,
-        desc: 'High-thrust magnetic plasma accelerator for rapid trajectory burns.',
-        spec: 'Isp 2200s · Thrust 240 mN · Fast burns'
-      },
-      {
-        id: 'prop_biprop_mmh',
-        name: 'MMH/NTO Bipropellant',
-        mass: 85,
-        power: -4,
-        cost: 2.8,
-        dv: 80,
-        rel: -2,
-        radTol: 40,
-        desc: 'Chemical bipropellant. Instantaneous impulse, high propellant mass.',
-        spec: 'Isp 320s · Thrust 450 N · Chemical'
-      }
-    ]
-  },
-  {
-    id: 'power',
-    name: 'Power',
-    icon: '⚡',
-    options: [
-      {
-        id: 'pwr_array_a',
-        name: 'Rigid Silicon Panels (1.8 kW)',
-        mass: 0,
-        power: 0,
-        cost: 0,
-        dv: 0,
-        rel: 0,
-        radTol: 35,
-        desc: 'Dual body-hinged silicon solar arrays. Nominal 1 AU baseline.',
-        spec: '1.8 kW @ 1 AU · Efficiency 22%'
-      },
-      {
-        id: 'pwr_array_b',
-        name: 'UltraFlex Circular GaAs (2.4 kW)',
-        mass: 38,
-        power: -8,
-        cost: 4.8,
-        dv: -5,
-        rel: 3,
-        radTol: 65,
-        desc: 'Expanded gallium arsenide solar wings. Sustains power at 1.4 AU.',
-        spec: '2.4 kW @ 1 AU · Efficiency 34%'
-      },
-      {
-        id: 'pwr_mmrtg',
-        name: 'Multi-Mission RTG (Pu-238)',
-        mass: 45,
-        power: -12,
-        cost: 16.5,
-        dv: -15,
-        rel: 7,
-        radTol: 250,
-        desc: 'Radioisotope thermoelectric generator. Constant power anywhere.',
-        spec: '110W constant · 0% solar dependence'
-      }
-    ]
-  },
-  {
-    id: 'comms',
-    name: 'Communications',
-    icon: '📡',
-    options: [
-      {
-        id: 'comm_xband_hga',
-        name: 'X-Band Parabolic HGA (1.2m)',
-        mass: 0,
-        power: 0,
-        cost: 0,
-        dv: 0,
-        rel: 0,
-        radTol: 45,
-        desc: 'Standard deep space transponder for Deep Space Network.',
-        spec: '2.4 Mbps @ 1.2 AU · 8.4 GHz'
-      },
-      {
-        id: 'comm_kaband_xl',
-        name: 'Ka-Band Deep Space Dish (2.2m)',
-        mass: 36,
-        power: 6,
-        cost: 5.2,
-        dv: 0,
-        rel: 5,
-        radTol: 55,
-        desc: 'High-frequency Ka-band dish. Doubles scientific downlink throughput.',
-        spec: '4.8 Mbps @ 1.2 AU · 32 GHz · +6dB margin'
-      },
-      {
-        id: 'comm_optical_laser',
-        name: 'Deep Space Optical Comms (DSOC)',
-        mass: 28,
-        power: 12,
-        cost: 9.8,
-        dv: -8,
-        rel: 3,
-        radTol: 70,
-        desc: 'Pulsed laser downlink. Extremely high bandwidth to Palomar telescope.',
-        spec: '25.0 Mbps @ 1.2 AU · Near-IR laser'
-      }
-    ]
-  },
-  {
-    id: 'science',
-    name: 'Science Payload',
-    icon: '⚗️',
-    options: [
-      {
-        id: 'sci_camera_spec',
-        name: 'PolyCam & IR Spectrometer',
-        mass: 0,
-        power: 0,
-        cost: 0,
-        dv: 0,
-        rel: 0,
-        radTol: 40,
-        desc: 'High-resolution telescopic framing imager and infrared spectrometer.',
-        spec: '1024×1024 CCD · Spectral 0.4–4.0 μm'
-      },
-      {
-        id: 'sci_radar_sounder',
-        name: '+Subsurface Radar Sounder',
-        mass: 55,
-        power: 14,
-        cost: 7.2,
-        dv: -20,
-        rel: 2,
-        radTol: 50,
-        desc: 'Ground-penetrating radar. Maps internal density and porosity voids.',
-        spec: 'VHF 15–25 MHz · Depth 250m'
-      },
-      {
-        id: 'sci_lidar_thermal',
-        name: '+3D LIDAR Altimeter & OTES',
-        mass: 42,
-        power: 10,
-        cost: 6.4,
-        dv: -12,
-        rel: 3,
-        radTol: 55,
-        desc: 'Centimeter-grade scanning laser altimeter for boulder field topography.',
-        spec: '1064 nm Laser · 10 kHz pulse'
-      }
-    ]
-  },
-  {
-    id: 'thermal',
-    name: 'Thermal Control',
-    icon: '🌡️',
-    options: [
-      {
-        id: 'therm_passive_mli',
-        name: 'Passive MLI Blankets & Louvers',
-        mass: 0,
-        power: 0,
-        cost: 0,
-        dv: 0,
-        rel: 0,
-        radTol: 35,
-        desc: 'Multi-layer Kapton/Mylar insulation with bimetallic louvers.',
-        spec: 'Effective emissivity ε* 0.02 · Passive'
-      },
-      {
-        id: 'therm_active_loop',
-        name: 'Pumped Fluid Heatpipe Loop',
-        mass: 32,
-        power: 5,
-        cost: 3.4,
-        dv: 0,
-        rel: 6,
-        radTol: 60,
-        desc: 'Mechanically pumped ammonia cooling loop. Withstands solar storm peaks.',
-        spec: 'Heat rejection 850W · Active PID control'
-      },
-      {
-        id: 'therm_aerogel_rhu',
-        name: 'Aerogel & Radioisotope Heaters',
-        mass: 22,
-        power: -2,
-        cost: 5.6,
-        dv: 0,
-        rel: 8,
-        radTol: 90,
-        desc: 'Solid silica aerogel insulation with Pu-238 heat pellets.',
-        spec: 'Maintains > -20°C in eclipse shadow'
-      }
-    ]
-  },
-  {
-    id: 'navigation',
-    name: 'Guidance & Nav',
-    icon: '🧭',
-    options: [
-      {
-        id: 'nav_star_tracker',
-        name: 'Dual Autonomous Star Trackers',
-        mass: 0,
-        power: 0,
-        cost: 0,
-        dv: 0,
-        rel: 0,
-        radTol: 45,
-        desc: 'Inertial stellar reference attitude control with gyroscopes.',
-        spec: 'Arcsecond pointing precision · 10 Hz'
-      },
-      {
-        id: 'nav_opnav_terrain',
-        name: 'Optical Nav & Hazard Detection',
-        mass: 14,
-        power: 3,
-        cost: 2.6,
-        dv: 0,
-        rel: 4,
-        radTol: 55,
-        desc: 'Autonomous vision algorithm for asteroid limb detection and approach.',
-        spec: 'Autonomous miss-distance correction'
-      },
-      {
-        id: 'nav_atomic_clock',
-        name: 'Deep Space Atomic Clock (DSAC)',
-        mass: 18,
-        power: 6,
-        cost: 5.8,
-        dv: 10,
-        rel: 5,
-        radTol: 80,
-        desc: 'Mercury-ion atomic clock for onboard autonomous 1-way navigation.',
-        spec: 'Stability < 10⁻¹⁵ · Real-time orbit fix'
-      }
-    ]
-  },
-  {
-    id: 'computing',
-    name: 'Flight Computing',
-    icon: '💻',
-    options: [
-      {
-        id: 'comp_flight_cpu',
-        name: 'Dual Redundant COTS Flight CPU',
-        mass: 0,
-        power: 0,
-        cost: 0,
-        dv: 0,
-        rel: 0,
-        radTol: 30,
-        desc: 'Commercial ARM processor with software voting. Cost-effective.',
-        spec: '800 MHz · Single Event Upset risk in CME'
-      },
-      {
-        id: 'comp_rad_hard',
-        name: 'RAD750 Radiation-Hardened CPU',
-        mass: 12,
-        power: 4,
-        cost: 4.2,
-        dv: 0,
-        rel: 5,
-        radTol: 120,
-        desc: 'NASA standard silicon-on-insulator rad-hard processor. Storm immune.',
-        spec: '133 MHz · Immune to Single Event Latchup'
-      },
-      {
-        id: 'comp_tri_redundant',
-        name: 'Triple-Modular Redundant LEON4',
-        mass: 20,
-        power: 7,
-        cost: 7.5,
-        dv: 0,
-        rel: 8,
-        radTol: 180,
-        desc: 'Fault-tolerant quad-core SPARC with hardware majority voting.',
-        spec: 'Full autonomous anomaly self-healing'
-      }
-    ]
-  }
-];
-
-// Helper to compute spacecraft totals
-export interface CraftTotals {
-  massKg: number;
-  powerW: number;
-  costM: number;
-  dvMs: number;
-  reliabilityPct: number;
-  radTolKrad: number;
-  budgetRemainingM: number;
-  isMassValid: boolean;
-  isBudgetValid: boolean;
-  isPowerValid: boolean;
-  isDvValid: boolean;
-  isFlightReady: boolean;
-}
-
-export function computeCraftTotals(selection: Record<number, number>): CraftTotals {
-  let massKg = 2430;
-  let powerW = 62;
-  let costSpentM = 36.5;
-  let dvMs = 1450;
-  let reliabilityPct = 84;
-  let radTolKrad = 45;
-
-  SUBSYSTEMS.forEach((sub, i) => {
-    const optIndex = selection[i] || 0;
-    const opt = sub.options[optIndex] || sub.options[0];
-    massKg += opt.mass;
-    powerW += opt.power;
-    costSpentM += opt.cost;
-    dvMs += opt.dv;
-    reliabilityPct += opt.rel;
-    radTolKrad = Math.max(radTolKrad, opt.radTol);
-  });
-
-  const budgetTotalM = 50.0;
-  const budgetRemainingM = Math.max(0, +(budgetTotalM - costSpentM).toFixed(1));
-
-  // Engineering Penalties
-  if (massKg > 2500) reliabilityPct -= 8;
-  if (costSpentM > 50) reliabilityPct -= 12;
-  if (powerW > 100) reliabilityPct -= 10;
-  if (dvMs < 1200) reliabilityPct -= 10;
-
-  reliabilityPct = Math.max(25, Math.min(99, reliabilityPct));
-
-  const isMassValid = massKg <= 2500;
-  const isBudgetValid = costSpentM <= 50;
-  const isPowerValid = powerW <= 100;
-  const isDvValid = dvMs >= 1200;
-  const isFlightReady = isMassValid && isBudgetValid && isPowerValid && isDvValid;
-
-  return {
-    massKg,
-    powerW,
-    costM: +costSpentM.toFixed(1),
-    dvMs,
-    reliabilityPct,
-    radTolKrad,
-    budgetRemainingM,
-    isMassValid,
-    isBudgetValid,
-    isPowerValid,
-    isDvValid,
-    isFlightReady,
-  };
-}
-
-// ============================================================================
-// GAME STATE DEFINITIONS
-// ============================================================================
-export type ScreenId =
-  | 'landing'
-  | 'how'
-  | 'brief'
-  | 'priorities'
-  | 'design'
-  | 'ready'
-  | 'stress'
-  | 'launch'
-  | 'flight'
-  | 'rock'
-  | 'debrief'
-  | 'board'
-  | 'nasa';
-
-export type FlightDockTab = 'maneuver' | 'power' | 'comms' | 'science' | null;
-
-export interface InFlightCrisis {
-  id: string;
-  day: number;
-  title: string;
-  headline: string;
-  desc: string;
-  options: {
-    label: string;
-    action: 'safe' | 'counter' | 'push';
-    desc: string;
-  }[];
+export interface Design {
+  prop: string;
+  struct: string;
+  power: string;
+  shield: string;
+  comms: string;
+  instr: string[];
+  load: number;
 }
 
 export interface GameState {
-  screen: ScreenId;
-  selection: Record<number, number>; // Subsystem index -> Component option index
-  mode: 'COMMANDER' | 'ENGINEER';
-  priorities: { science: number; survivability: number; affordability: number };
-
-  // Flight Simulation State
-  day: number;
-  timeSpeed: number; // 0 (paused), 1, 5, 20, 100
-  fuelKg: number;
-  fuelMaxKg: number;
-  healthPct: number;
-  dataBufferGb: number;
-  dataBufferMaxGb: number;
-  dataReturnedGb: number;
-  sciencePoints: number;
-  missDistanceKm: number;
-  powerAlloc: { science: number; comms: number; computing: number; thermal: number };
-  safeMode: boolean;
-  busTempC: number;
-  batteryPct: number;
-
-  // Maneuvers executed
-  maneuversDone: { tcm1: boolean; tcm2: boolean; rdvz: boolean };
-
-  // Hazard event resolutions
-  resolvedEvents: { id: string; choice: string; impact: string }[];
-  activeCrisis: InFlightCrisis | null;
-
-  // Active UI Sheet / Overlays
-  activeDockTab: FlightDockTab;
-  compareSubsystemIndex: number | null;
-  compareOptionIndex: number | null;
-  toastMessage: string | null;
-  flashBadge: Record<string, number> | null;
-  surveysDone: number;
-  downlinksDone: number;
+  page: number;
+  prevPage: number;
+  mass: number;
+  deltaV: number;
+  dvMax: number;
+  budget: number;
+  scienceScore: number;
+  banked: number;
+  dataQueue: number;
+  queueValue: number;
+  maxDataStorage: number;
+  txBuffer: number;
+  txValue: number;
+  delivered: number;
+  lostPackets: number;
+  compCount: number;
+  health: number;
+  fuel: number;
+  power: { science: number; comms: number; computing: number; thermal: number };
+  mode: 'CADET' | 'COMMANDER' | 'VETERAN';
+  missionPhase: string;
+  eventState: {
+    activeEvents: any[];
+    decisionHistory: { page: number; label: string; choice: string; effect: string }[];
+    causalLog: { met: number; text: string }[];
+  };
+  met: number;
+  cruise: number;
+  warp: number;
+  nav: number;
+  heatSpike: number;
+  repoint: number;
+  repointCd: number;
+  cd: Record<string, number>;
+  scans: Record<string, number>;
+  design: Design;
+  priorities: { science: number; safety: number; economy: number };
+  stress: { struct: number; thermal: number; vib: number; result: 'PASS' | 'WARNING' | 'FAIL' | null } | null;
+  override: boolean;
+  eventId: string;
+  eventPick: number | null;
+  apInit: boolean;
+  range: number;
+  vel: number;
+  docked: 'success' | 'bad' | 'abort' | null;
+  dockTries: number;
+  crisisLeft: number;
+  crisisPick: number | null;
+  crisisDmg: number;
+  outcome: 'success' | 'failure' | null;
+  timeline: { p: number; met: number; health: number; fuel: number; banked: number }[];
 }
 
-export const INITIAL_GAME_STATE: GameState = {
-  screen: 'landing',
-  selection: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 },
-  mode: 'COMMANDER',
-  priorities: { science: 1, survivability: 1, affordability: 1 },
+export interface GameContextType {
+  S: GameState;
+  up: (f: Partial<GameState> | ((prev: GameState) => Partial<GameState>)) => void;
+  go: (p: number) => void;
+  restart: () => void;
+  retry: () => void;
+  audioMuted: boolean;
+  toggleMute: () => void;
+}
 
-  day: 1,
-  timeSpeed: 1,
-  fuelKg: 1250,
-  fuelMaxKg: 1250,
-  healthPct: 100,
-  dataBufferGb: 4.2,
-  dataBufferMaxGb: 32.0,
-  dataReturnedGb: 0,
-  sciencePoints: 0,
-  missDistanceKm: 42000,
-  powerAlloc: { science: 30, comms: 25, computing: 25, thermal: 20 },
-  safeMode: false,
-  busTempC: 18.5,
-  batteryPct: 100,
+// ============================================================================
+// CONSTANTS & GAME DATA
+// ============================================================================
 
-  maneuversDone: { tcm1: false, tcm2: false, rdvz: false },
-  resolvedEvents: [],
-  activeCrisis: null,
+const RM = typeof window !== 'undefined' && !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+const fmt = (n: number, d = 0) => Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const pad = (n: number, l = 2) => String(Math.floor(n)).padStart(l, '0');
+const ri = (i: number): React.CSSProperties => ({ '--i': i } as any);
 
-  activeDockTab: null,
-  compareSubsystemIndex: null,
-  compareOptionIndex: null,
-  toastMessage: null,
-  flashBadge: null,
-  surveysDone: 0,
-  downlinksDone: 0,
+const Ctx = createContext<GameContextType | null>(null);
+const useG = () => useContext(Ctx)!;
+
+/* ---------- Vector Icons ---------- */
+const IC: Record<string, string> = {
+  chev: 'M9 6l6 6-6 6',
+  back: 'M15 6l-6 6 6 6',
+  x: 'M6 6l12 12M18 6L6 18',
+  check: 'M5 12l5 5L20 7',
+  warn: 'M12 3l10 18H2L12 3zM12 10v5M12 18v.5',
+  bolt: 'M13 2L4 14h7l-1 8 9-12h-7l1-8z',
+  sig: 'M3 20h2v-4H3zM8 20h2v-8H8zM13 20h2V8h-2zM18 20h2V4h-2z',
+  data: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6',
+  rocket: 'M12 2c3 2 5 6 5 10l-2 4H9l-2-4c0-4 2-8 5-10zM9 16l-2 5 5-2 5 2-2-5',
+  flame: 'M12 3c1 4 5 5 5 10a5 5 0 01-10 0c0-2 1-3 2-4 0 2 1 2 2 2 0-3-1-5 1-8z',
+  shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z',
+  cpu: 'M7 7h10v10H7zM9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4',
+  therm: 'M10 14V5a2 2 0 114 0v9a4 4 0 11-4 0z',
+  search: 'M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5',
+  lock: 'M6 11h12v10H6zM8 11V7a4 4 0 118 0v4',
+  play: 'M7 4l13 8-13 8z',
+  refresh: 'M4 12a8 8 0 0114-5l2-2v6h-6l2.5-2.5A5 5 0 1017 14',
+  skip: 'M5 5l9 7-9 7zM17 5v14',
+  scan: 'M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M4 12h16',
+  eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 100 6 3 3 0 000-6z',
+  sound: 'M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07',
+  mute: 'M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6'
 };
 
-// ============================================================================
-// STRESS TEST SCENARIOS
-// ============================================================================
-export const STRESS_HAZARDS = [
-  { name: 'Coronal Mass Ejection', sub: 'computing', penalty: 32, label: 'Solar Storm' },
-  { name: 'Hypervelocity Micrometeoroid', sub: 'structure', penalty: 28, label: 'Micrometeoroid' },
-  { name: 'Deep Space Thermal Soak', sub: 'thermal', penalty: 24, label: 'Thermal Soak' },
-  { name: 'DSN Carrier Frequency Desync', sub: 'comms', penalty: 20, label: 'Comms Blackout' },
-  { name: 'Van Allen Radiation Belt', sub: 'computing', penalty: 22, label: 'Radiation Belt' },
-  { name: 'Solar Array Voltage Dip', sub: 'power', penalty: 18, label: 'Power Grid Dip' },
-  { name: 'Asteroid Dust Cloud Abrasion', sub: 'structure', penalty: 16, label: 'Dust Cloud' },
-  { name: 'Planetary Eclipse Shadow', sub: 'power', penalty: 14, label: 'Eclipse Shadow' },
+const Ic: React.FC<{ n: string; s?: number; sw?: number }> = ({ n, s = 20, sw = 1.8 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={IC[n] || IC.chevron} />
+  </svg>
+);
+
+const BUS = { mass: 780, cost: 14 };
+const LIM = { mass: 3000, budget: 42, dv: 1450 };
+
+const PARTS: Record<string, Part[]> = {
+  prop: [
+    { id: 'chem', name: 'Bipropellant Engine', mass: 320, cost: 4, isp: 310, vib: 72, heat: 14, thrust: 1.25, desc: 'Cheap and fast, heavy, rough ride.' },
+    { id: 'hall', name: 'Hall Thruster Cluster', mass: 240, cost: 8, isp: 520, vib: 40, heat: 10, thrust: 1, desc: 'Balanced efficiency and cruise speed.' },
+    { id: 'ion', name: 'Gridded Ion Drive', mass: 210, cost: 10, isp: 700, vib: 24, heat: 8, thrust: 0.8, desc: 'Best fuel economy, slowest cruise.' }
+  ],
+  struct: [
+    { id: 'al', name: 'Aluminum Frame', mass: 410, cost: 3, str: 60, desc: 'Light on budget, thin on margin.' },
+    { id: 'cc', name: 'Carbon Composite', mass: 290, cost: 7, str: 78, desc: 'Strong and light, expensive.' },
+    { id: 'ti', name: 'Titanium Truss', mass: 520, cost: 5, str: 90, desc: 'Very strong, very heavy.' }
+  ],
+  power: [
+    { id: 'solarS', name: 'Solar Wings S', mass: 110, cost: 3.5, watts: 900, heat: 0, desc: 'Small arrays, little spare power.' },
+    { id: 'solarL', name: 'Solar Wings L', mass: 160, cost: 5, watts: 1300, heat: 0, desc: 'Large arrays, good output.' },
+    { id: 'rtg', name: 'RTG Pack', mass: 210, cost: 9.5, watts: 1000, heat: 14, flare: true, desc: 'Flare-proof, runs hot.' }
+  ],
+  shield: [
+    { id: 'none', name: 'No Shielding', mass: 0, cost: 0, rating: 0, desc: 'Zero mass, zero protection.' },
+    { id: 'light', name: 'Whipple Shield', mass: 60, cost: 2, rating: 25, desc: 'Stops small debris.' },
+    { id: 'heavy', name: 'Multi-layer Armor', mass: 140, cost: 4.5, rating: 55, desc: 'Serious protection, heavy.' }
+  ],
+  comms: [
+    { id: 'lga', name: 'Low-Gain Antenna', mass: 15, cost: 1, gain: 1, desc: 'Wide beam, weak link.' },
+    { id: 'hga', name: 'High-Gain Dish', mass: 55, cost: 3, gain: 1.35, desc: 'Narrow beam, strong link.' }
+  ],
+  instr: [
+    { id: 'spec', name: 'Spectrometer', mass: 45, cost: 3.5, sci: 14, data: 2.4, heat: 4, desc: 'Surface composition.' },
+    { id: 'cam', name: 'Multispectral Camera', mass: 30, cost: 2.2, sci: 9, data: 3.6, heat: 3, desc: 'Imaging, data heavy.' },
+    { id: 'radar', name: 'Radar Sounder', mass: 70, cost: 4.8, sci: 16, data: 2, heat: 6, desc: 'Interior structure.' },
+    { id: 'sample', name: 'Sample Collector', mass: 95, cost: 6, sci: 22, data: 0.8, heat: 5, needsDock: true, desc: 'Highest value. Needs docking.' },
+    { id: 'mag', name: 'Magnetometer', mass: 20, cost: 1.4, sci: 6, data: 0.6, heat: 1, desc: 'Cheap, small returns.' }
+  ]
+};
+
+const CATS: [string, string, string][] = [
+  ['prop', 'Propulsion', 'flame'],
+  ['struct', 'Structure', 'shield'],
+  ['power', 'Power', 'bolt'],
+  ['shield', 'Shielding', 'shield'],
+  ['comms', 'Comms', 'sig'],
+  ['instr', 'Instruments', 'scan']
 ];
 
-// ============================================================================
-// IN-FLIGHT CRISIS EVENTS
-// ============================================================================
-export const MISSION_CRISES: InFlightCrisis[] = [
-  {
-    id: 'evt_micrometeoroid',
-    day: 42,
-    title: 'MICROMETEOROID SHOWER DETECTED',
-    headline: 'High-density dust debris stream intersecting spacecraft flight path.',
-    desc: 'Optical sensors report high-velocity micrometeoroid impacts along the forward bus.',
-    options: [
+const DEF_DESIGN: Design = {
+  prop: 'hall',
+  struct: 'al',
+  power: 'solarL',
+  shield: 'light',
+  comms: 'hga',
+  instr: ['spec', 'cam'],
+  load: 600
+};
+
+const findP = (k: string, id: string): Part => PARTS[k]?.find(p => p.id === id) || { id, name: id, mass: 0, cost: 0, desc: '' };
+
+function calcDesign(d: Design) {
+  const P = findP('prop', d.prop);
+  const St = findP('struct', d.struct);
+  const Pw = findP('power', d.power);
+  const Sh = findP('shield', d.shield);
+  const Cm = findP('comms', d.comms);
+  const ins = d.instr.map(id => findP('instr', id));
+  const sum = (a: any[], f: (x: any) => number) => a.reduce((t, x) => t + f(x), 0);
+  const dry = BUS.mass + P.mass + St.mass + Pw.mass + Sh.mass + Cm.mass + sum(ins, i => i.mass);
+  const wet = dry + d.load;
+  const cost = BUS.cost + P.cost + St.cost + Pw.cost + Sh.cost + Cm.cost + sum(ins, i => i.cost);
+  const dv = (P.isp || 300) * 9.81 * Math.log(wet / dry);
+  const sci = sum(ins, i => i.sci || 0);
+  return {
+    dry,
+    wet,
+    cost,
+    dv,
+    sci,
+    P,
+    St,
+    Pw,
+    Sh,
+    Cm,
+    ins,
+    structPct: (wet / ((St.str || 60) * 45)) * 100,
+    thermalPct: 40 + sci * 0.45 + (P.heat || 0) + (Pw.heat || 0),
+    vibPct: (P.vib || 50) * (wet / 2400)
+  };
+}
+
+const designPatch = (s: any, d: Design) => {
+  const c = calcDesign(d);
+  return {
+    design: d,
+    mass: Math.round(c.wet),
+    deltaV: Math.round(c.dv),
+    dvMax: Math.round(c.dv),
+    fuel: 100,
+    budget: Math.round((LIM.budget - c.cost) * 1e6)
+  };
+};
+
+const PH: Record<number, string> = {
+  1: 'STANDBY', 2: 'STANDBY', 3: 'BRIEFING', 4: 'PLANNING', 5: 'DESIGN',
+  6: 'STRESS TEST', 7: 'LAUNCH', 8: 'CRUISE', 9: 'CRUISE', 10: 'ANOMALY',
+  11: 'APPROACH', 12: 'RENDEZVOUS', 13: 'SCIENCE', 14: 'DATA', 15: 'POWER',
+  16: 'COMMS', 17: 'CRISIS', 18: 'RECOVERY', 19: 'DEBRIEF', 20: 'ARCHIVE'
+};
+
+const modeMult = (m: string) => ({ CADET: 0.75, COMMANDER: 1, VETERAN: 1.3 }[m] || 1);
+const dmgMult = (s: GameState) => (1.25 - (s.priorities.safety / 100) * 0.9) * modeMult(s.mode);
+const sciYield = (s: GameState) => clamp(s.power.science / 30, 0.4, 1.8);
+const thermalLoad = (s: GameState) => {
+  const p = s.power;
+  const heat = p.science * 0.9 + p.computing * 0.6 + p.comms * 0.5;
+  const cool = p.thermal * 1.6;
+  const base = s.stress ? s.stress.thermal : 60;
+  return clamp(35 + (heat - cool) * 0.9 + (base - 60) * 0.4 + s.heatSpike, 0, 120);
+};
+const signalQ = (s: GameState) =>
+  clamp(0.3 + (s.power.comms / 100) * 1.1 + ((findP('comms', s.design.comms).gain || 1) - 1) * 0.25 + (s.repoint > 0 ? 0.12 : 0) - 0.05, 0.12, 0.97);
+
+const lvl = (v: number, w: number, c: number, inv?: boolean) => (inv ? (v <= c ? 'crit' : v <= w ? 'warn' : '') : (v >= c ? 'crit' : v >= w ? 'warn' : ''));
+const L = (s: GameState, text: string) => ({ ...s.eventState, causalLog: [...s.eventState.causalLog, { met: s.met, text }] });
+const hurt = (s: GameState, a: number) => clamp(s.health - a * dmgMult(s), 0, 100);
+const dvPatch = (s: GameState, amt: number) => {
+  const nd = Math.max(0, s.deltaV - amt);
+  const c = calcDesign(s.design);
+  return {
+    deltaV: nd,
+    fuel: Math.round((nd / Math.max(1, s.dvMax)) * 1000) / 10,
+    mass: Math.round(c.dry + (c.wet - c.dry) * (nd / Math.max(1, s.dvMax)))
+  };
+};
+
+const EVENTS: Record<string, {
+  title: string;
+  icon: string;
+  text: string;
+  opts: {
+    k: string;
+    sub: string;
+    run: (s: GameState) => { dv?: number; dmg?: number; nav?: number; data?: number; power?: Record<string, number>; log: string };
+  }[];
+}> = {
+  meteor: {
+    title: 'MICROMETEOROID SWARM',
+    icon: 'warn',
+    text: 'Radar shows a dense debris stream crossing the trajectory. Impact in under two minutes.',
+    opts: [
       {
-        label: 'Slew Behind Engine Block',
-        action: 'counter',
-        desc: 'Burn 35 kg propellant to turn main engine bell into forward shield.'
+        k: 'Rotate stern-first',
+        sub: 'Burns 20 m/s of ΔV. Presents the engine bell, not the bus.',
+        run: s => ({ dv: 20, dmg: Math.max(2, 14 - (findP('shield', s.design.shield).rating || 0) * 0.1), log: 'Stern-first rotation took the swarm on the engine bell' })
       },
       {
-        label: 'Enter Autonomous Safe Mode',
-        action: 'safe',
-        desc: 'Fold solar arrays edge-on and minimize cross-sectional area.'
+        k: 'Hold attitude, guard the arrays',
+        sub: 'Costs nothing. Shielding matters here.',
+        run: s => ({ dmg: Math.max(3, 22 - (findP('shield', s.design.shield).rating || 0) * 0.3), log: 'Holding attitude relied on shielding rating' })
       },
       {
-        label: 'Rely on Bus Hull Integrity',
-        action: 'push',
-        desc: 'Maintain flight attitude. Unshielded buses will take impact damage.'
+        k: 'Ignore it and keep scanning',
+        sub: 'Gain 1.5 GB of queued data. Take the hits.',
+        run: s => ({ dmg: 30 - (findP('shield', s.design.shield).rating || 0) * 0.4, data: 1.5, log: 'Ignoring the swarm traded hull health for data' })
       }
     ]
   },
-  {
-    id: 'evt_solar_storm',
-    day: 88,
-    title: 'HIGH ALERT: SEVERE CORONAL MASS EJECTION',
-    headline: 'Major X-Class solar flare detected. High-energy proton flux rising rapidly.',
-    desc: 'Intense proton radiation wave incoming. Can latch up flight computers and fry uncooled electronics.',
-    options: [
+  flare: {
+    title: 'SOLAR FLARE WARNING',
+    icon: 'bolt',
+    text: 'The Sun has released an energetic particle burst. Arrival in minutes. Electronics and arrays are exposed.',
+    opts: [
       {
-        label: 'Reboot to Rad-Safe Kernel',
-        action: 'safe',
-        desc: 'Protect avionics in safe mode. Science paused for 48 hours.'
+        k: 'Enter safe mode',
+        sub: 'Instruments off, bus stable. Loses 1.2 GB of queued data.',
+        run: () => ({ dmg: 4, data: -1.2, log: 'Safe mode protected hardware at the cost of queued data' })
       },
       {
-        label: 'Route Peak Power to Thermal Loop',
-        action: 'counter',
-        desc: 'Overdrive pumped coolant to dissipate thermal radiative spikes.'
+        k: 'Shift power to thermal',
+        sub: '+15 thermal, −15 science power.',
+        run: s => ({ dmg: Math.max(2, 10 - (findP('shield', s.design.shield).rating || 0) * 0.08), power: { science: -15, thermal: 15 }, log: 'Power moved from science to thermal to ride out the flare' })
       },
       {
-        label: 'Continue Science Observations',
-        action: 'push',
-        desc: 'Capture unprecedented CME solar science, risking major hardware damage.'
+        k: 'Ride it out',
+        sub: 'No changes. RTGs cope better than solar arrays.',
+        run: s => ({ dmg: Math.max(3, 28 - (findP('shield', s.design.shield).rating || 0) * 0.35 - (findP('power', s.design.power).flare ? 10 : 0)), log: 'Riding out the flare depended on shielding and power source' })
       }
     ]
   },
-  {
-    id: 'evt_reaction_wheel',
-    day: 116,
-    title: 'ATTITUDE CONTROL REACTION WHEEL JITTER',
-    headline: 'Flywheel 3 exhibiting high bearing friction and angular telemetry drift.',
-    desc: 'Uncompensated vibration will blur high-resolution asteroid reconnaissance images.',
-    options: [
+  tracker: {
+    title: 'STAR TRACKER GLITCH',
+    icon: 'eye',
+    text: 'The primary star tracker is returning noise. Navigation accuracy is degrading.',
+    opts: [
       {
-        label: 'Switch to RCS Thruster Guidance',
-        action: 'counter',
-        desc: 'Expend 20 kg propellant to stabilize spacecraft using hydrazine thrusters.'
+        k: 'Recalibrate with sun sensor',
+        sub: 'Burns 15 m/s of ΔV. Improves navigation.',
+        run: () => ({ dv: 15, nav: 5, dmg: 0, log: 'Sun-sensor recalibration improved navigation at a fuel cost' })
       },
       {
-        label: 'Desaturate via Magnetic Torquers',
-        action: 'safe',
-        desc: 'Throttle survey imaging rate to allow slow flywheel desaturation.'
+        k: 'Switch to backup tracker',
+        sub: 'Costs nothing. Navigation −10.',
+        run: () => ({ nav: -10, dmg: 2, log: 'Backup tracker swap cost navigation accuracy' })
       },
       {
-        label: 'Ignore & Push Target Scans',
-        action: 'push',
-        desc: 'Take images immediately despite optical blurring.'
+        k: 'Trust inertial drift',
+        sub: 'Navigation −25. Docking will be harder.',
+        run: () => ({ nav: -25, dmg: 0, log: 'Trusting inertial drift degraded navigation sharply' })
+      }
+    ]
+  },
+  wheel: {
+    title: 'REACTION WHEEL FAULT',
+    icon: 'cpu',
+    text: 'A reaction wheel bearing shows rising friction. Attitude control is at risk.',
+    opts: [
+      {
+        k: 'Desaturate with thrusters',
+        sub: 'Burns 35 m/s of ΔV. Safe.',
+        run: () => ({ dv: 35, dmg: 0, log: 'Thruster desaturation spent fuel to save the wheel' })
+      },
+      {
+        k: 'Reduce wheel rate',
+        sub: 'Navigation −8 and minor wear.',
+        run: () => ({ nav: -8, dmg: 5, log: 'Reducing wheel rate lowered navigation accuracy' })
+      },
+      {
+        k: 'Continue as normal',
+        sub: '50% chance of a serious failure.',
+        run: () => {
+          const bad = Math.random() < 0.5;
+          return { dmg: bad ? 35 : 0, log: bad ? 'The wheel seized and damaged the bus' : 'The wheel held and no damage occurred' };
+        }
       }
     ]
   }
-];
+};
+const EVENT_IDS = Object.keys(EVENTS);
 
-// ============================================================================
-// MAIN GAME COMPONENT
-// ============================================================================
-export const App: React.FC = () => {
-  const [g, setG] = useState<GameState>(INITIAL_GAME_STATE);
-  const updateG = (updater: Partial<GameState> | ((prev: GameState) => GameState)) => {
-    setG((prev) => ({ ...prev, ...(typeof updater === 'function' ? updater(prev) : updater) }));
+const initState = (keep?: any): GameState => {
+  const d = { ...DEF_DESIGN };
+  const base: GameState = {
+    page: 1,
+    prevPage: 1,
+    mass: 2430,
+    deltaV: 1450,
+    dvMax: 1450,
+    budget: 42e6,
+    scienceScore: 0,
+    banked: 0,
+    dataQueue: 0,
+    queueValue: 0,
+    maxDataStorage: 32,
+    txBuffer: 0,
+    txValue: 0,
+    delivered: 0,
+    lostPackets: 0,
+    compCount: 0,
+    health: 100,
+    fuel: 100,
+    power: { science: 30, comms: 25, computing: 25, thermal: 20 },
+    mode: 'COMMANDER',
+    missionPhase: 'LAUNCH',
+    eventState: { activeEvents: [], decisionHistory: [], causalLog: [] },
+    met: 0,
+    cruise: 0,
+    warp: 1,
+    nav: 70,
+    heatSpike: 0,
+    repoint: 0,
+    repointCd: 0,
+    cd: {},
+    scans: {},
+    design: d,
+    priorities: { science: 40, safety: 35, economy: 25 },
+    stress: null,
+    override: false,
+    eventId: EVENT_IDS[Math.floor(Math.random() * EVENT_IDS.length)],
+    eventPick: null,
+    apInit: false,
+    range: 1800,
+    vel: 90,
+    docked: null,
+    dockTries: 0,
+    crisisLeft: 20,
+    crisisPick: null,
+    crisisDmg: 0,
+    outcome: null,
+    timeline: []
   };
+  Object.assign(base, designPatch(base, d));
+  if (keep) {
+    base.design = keep.design;
+    Object.assign(base, designPatch(base, keep.design));
+    base.priorities = keep.priorities;
+    base.mode = keep.mode;
+  }
+  return base;
+};
 
-  const totals = useMemo(() => computeCraftTotals(g.selection), [g.selection]);
+/* per-tick simulation (dt seconds) */
+function tick(s: GameState, dt: number): Partial<GameState> {
+  const p = s.page;
+  const o: Partial<GameState> = {};
+  if (p >= 8 && p <= 17 && s.outcome !== 'failure') {
+    o.met = s.met + dt * (p <= 10 ? 3600 * s.warp : 700);
+    const tl = thermalLoad(s);
+    if (tl > 80) o.health = clamp((o.health ?? s.health) - (tl > 92 ? 1.5 : 0.6) * dt * dmgMult(s), 0, 100);
+  }
+  if (p >= 8 && p <= 10 && s.cruise < 100) {
+    o.cruise = Math.min(100, s.cruise + dt * 1.2 * (findP('prop', s.design.prop).thrust || 1) * s.warp);
+  }
+  if (s.heatSpike > 0) o.heatSpike = Math.max(0, s.heatSpike - dt * 3);
+  if (s.repoint > 0) o.repoint = Math.max(0, s.repoint - dt);
+  if (s.repointCd > 0) o.repointCd = Math.max(0, s.repointCd - dt);
+  if (p === 11 && s.range > 60) o.range = Math.max(60, s.range - s.vel * 0.9 * dt);
+  if (p === 17 && s.crisisPick === null) {
+    o.crisisLeft = Math.max(0, s.crisisLeft - dt);
+    o.health = clamp((o.health ?? s.health) - 0.3 * dt * dmgMult(s), 0, 100);
+  }
+  const cd = s.cd;
+  let any = false;
+  const nc: Record<string, number> = {};
+  for (const k in cd) {
+    if (cd[k] > 0) {
+      nc[k] = Math.max(0, cd[k] - dt);
+      any = true;
+    }
+  }
+  if (any) o.cd = nc;
+  return o;
+}
 
-  // Viewport & Audio state
-  const [isPhoneFrame, setIsPhoneFrame] = useState(true);
-  const [scaleFactor, setScaleFactor] = useState(1);
-  const [isMobileDevice, setIsMobileDevice] = useState(false);
-  const [muted, setMuted] = useState(isAudioMuted());
+function finalScore(s: GameState) {
+  const w = (k: 'science' | 'safety' | 'economy') => s.priorities[k] / 33.3;
+  const sci = s.banked * 6 * w('science');
+  const surv = (s.health * 5 + (s.docked === 'success' ? 150 : 0)) * w('safety');
+  const eco = ((s.budget / 1e6) * 25 + (s.deltaV / Math.max(1, s.dvMax)) * 300) * w('economy');
+  const total = s.outcome === 'failure' ? Math.round((sci + eco) * 0.3) : Math.round(sci + surv + eco);
+  const grade = s.outcome === 'failure' ? 'F' : total >= 2000 ? 'S' : total >= 1500 ? 'A' : total >= 1000 ? 'B' : total >= 500 ? 'C' : 'D';
+  const verdict = s.outcome === 'failure' ? 'MISSION LOST' : s.banked >= 60 ? 'MISSION SUCCESS' : 'PARTIAL SUCCESS';
+  return { sci: Math.round(sci), surv: Math.round(surv), eco: Math.round(eco), total, grade, verdict };
+}
+
+const bestGet = () => {
+  try {
+    return +localStorage.getItem('ll-best')! || 0;
+  } catch {
+    return 0;
+  }
+};
+const bestSet = (v: number) => {
+  try {
+    localStorage.setItem('ll-best', String(v));
+  } catch {}
+};
+
+// ============================================================================
+// SHARED UI COMPONENTS
+// ============================================================================
+
+const Num: React.FC<{ v: number; d?: number; suffix?: string; cls?: string; dur?: number; start?: number }> = ({
+  v,
+  d = 0,
+  suffix = '',
+  cls = '',
+  dur = 420,
+  start
+}) => {
+  const [x, setX] = useState(start != null ? start : v);
+  const from = useRef(start != null ? start : v);
+  const raf = useRef(0);
 
   useEffect(() => {
-    const handleResize = () => {
-      const isMobile = window.innerWidth <= 600;
-      setIsMobileDevice(isMobile);
-      if (isMobile) {
-        setIsPhoneFrame(false);
-        setScaleFactor(1);
-      } else {
-        const sc = Math.min(1, (window.innerHeight - 60) / 852, (window.innerWidth - 40) / 393);
-        setScaleFactor(sc);
-      }
+    if (RM) {
+      setX(v);
+      from.current = v;
+      return;
+    }
+    const a = from.current;
+    const b = v;
+    const t0 = performance.now();
+    cancelAnimationFrame(raf.current);
+    const f = (now: number) => {
+      const t = clamp((now - t0) / dur, 0, 1);
+      const e = 1 - Math.pow(1 - t, 3);
+      const val = a + (b - a) * e;
+      from.current = val;
+      setX(val);
+      if (t < 1) raf.current = requestAnimationFrame(f);
     };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    raf.current = requestAnimationFrame(f);
+    return () => cancelAnimationFrame(raf.current);
+  }, [v, dur]);
 
-  // Toast message auto-dismiss
-  useEffect(() => {
-    if (g.toastMessage) {
-      const t = setTimeout(() => updateG({ toastMessage: null }), 2800);
-      return () => clearTimeout(t);
-    }
-  }, [g.toastMessage]);
+  return <span className={'num ' + cls}>{fmt(x, d)}{suffix}</span>;
+};
 
-  // Flash badge auto-dismiss
-  useEffect(() => {
-    if (g.flashBadge) {
-      const t = setTimeout(() => updateG({ flashBadge: null }), 1600);
-      return () => clearTimeout(t);
-    }
-  }, [g.flashBadge]);
-
-  // ==========================================================================
-  // CORE FLIGHT SIMULATION LOOP
-  // ==========================================================================
-  useEffect(() => {
-    if (g.screen !== 'flight' || g.timeSpeed === 0 || g.activeCrisis) return;
-
-    const intervalTime = Math.max(50, 600 / g.timeSpeed);
-    const interval = setInterval(() => {
-      setG((prev) => {
-        if (prev.screen !== 'flight' || prev.timeSpeed === 0 || prev.activeCrisis) return prev;
-
-        const nextDay = prev.day + 1;
-
-        // Check for crisis events
-        const crisis = MISSION_CRISES.find(
-          (c) => c.day === nextDay && !prev.resolvedEvents.some((r) => r.id === c.id)
-        );
-        if (crisis) {
-          playWarningAlert();
-          return {
-            ...prev,
-            day: nextDay,
-            activeCrisis: crisis,
-            toastMessage: `CRISIS ALERT: ${crisis.title}`,
-          };
-        }
-
-        // Check for Mission Conclusion (Day 146)
-        if (nextDay >= 146 || prev.healthPct <= 0) {
-          playSuccessChime();
-          // Save record to local storage
-          try {
-            const history = JSON.parse(localStorage.getItem('last_light_records') || '[]');
-            history.unshift({
-              score: prev.sciencePoints * 10 + Math.round(prev.dataReturnedGb * 20),
-              sci: prev.sciencePoints,
-              data: prev.dataReturnedGb,
-              health: Math.round(prev.healthPct),
-              cost: totals.costM,
-              success: prev.healthPct >= 35 && prev.sciencePoints >= 50,
-              date: new Date().toLocaleDateString(),
-            });
-            localStorage.setItem('last_light_records', JSON.stringify(history.slice(0, 20)));
-          } catch {
-            // Ignore storage errors
-          }
-
-          return {
-            ...prev,
-            day: 146,
-            screen: 'debrief',
-            toastMessage: 'MISSION COMPLETED: Entering debrief analysis.',
-          };
-        }
-
-        // Distance to Sun (AU) scaling from 1.0 to 1.25 AU
-        const sunDist = 1.0 + (nextDay / 146) * 0.25;
-        const solarIntensity = 1 / (sunDist * sunDist);
-        const solarGenW = (100 - totals.powerW * 0.4) * solarIntensity;
-
-        // Net power balance
-        const activePowerDrawW =
-          (prev.powerAlloc.science * 0.4 +
-            prev.powerAlloc.comms * 0.35 +
-            prev.powerAlloc.computing * 0.25 +
-            prev.powerAlloc.thermal * 0.3) *
-          (prev.safeMode ? 0.35 : 1.0);
-
-        const netW = solarGenW - activePowerDrawW;
-        let newBattery = prev.batteryPct;
-        if (netW < 0) {
-          newBattery = Math.max(0, prev.batteryPct - 0.4);
-        } else {
-          newBattery = Math.min(100, prev.batteryPct + 0.6);
-        }
-
-        // Thermal calculations
-        let newTemp = prev.busTempC;
-        if (prev.powerAlloc.thermal < 15) {
-          newTemp = Math.max(-45, prev.busTempC - 0.5); // Freezing
-        } else if (prev.powerAlloc.thermal > 45) {
-          newTemp = Math.min(75, prev.busTempC + 0.6);  // Overheating
-        } else {
-          newTemp = prev.busTempC + (20 - prev.busTempC) * 0.08; // Normalizing
-        }
-
-        // Passive science collection
-        let newBuffer = prev.dataBufferGb;
-        let newSci = prev.sciencePoints;
-        let newHealth = prev.healthPct;
-
-        if (!prev.safeMode && prev.powerAlloc.science >= 20 && newBattery > 10) {
-          newBuffer = Math.min(prev.dataBufferMaxGb, prev.dataBufferGb + 0.08);
-          newSci += 0.15;
-        }
-
-        // Battery brownout damage
-        if (newBattery <= 0) {
-          newHealth = Math.max(0, newHealth - 0.5);
-        }
-
-        // Thermal extreme damage
-        if (newTemp < -30 || newTemp > 60) {
-          newHealth = Math.max(0, newHealth - 0.3);
-        }
-
-        return {
-          ...prev,
-          day: nextDay,
-          batteryPct: newBattery,
-          busTempC: +newTemp.toFixed(1),
-          dataBufferGb: +newBuffer.toFixed(2),
-          sciencePoints: +newSci.toFixed(1),
-          healthPct: +newHealth.toFixed(1),
-        };
-      });
-    }, intervalTime);
-
-    return () => clearInterval(interval);
-  }, [g.screen, g.timeSpeed, g.activeCrisis, totals]);
-
-  // ==========================================================================
-  // GAMEPLAY ACTION HANDLERS
-  // ==========================================================================
-  const triggerToast = (msg: string) => updateG({ toastMessage: msg });
-
-  const handleSelectComponent = (subIndex: number, optIndex: number) => {
-    playSuccessChime();
-    const oldOpt = SUBSYSTEMS[subIndex].options[g.selection[subIndex] || 0];
-    const newOpt = SUBSYSTEMS[subIndex].options[optIndex];
-
-    updateG((prev) => ({
-      selection: { ...prev.selection, [subIndex]: optIndex },
-      compareSubsystemIndex: null,
-      compareOptionIndex: null,
-      flashBadge: {
-        Mass: newOpt.mass - oldOpt.mass,
-        Power: newOpt.power - oldOpt.power,
-        Cost: newOpt.cost - oldOpt.cost,
-        'Δv': newOpt.dv - oldOpt.dv,
-      },
-    }));
-  };
-
-  const handleExecuteManeuver = (type: 'tcm1' | 'tcm2' | 'rdvz') => {
-    if (g.fuelKg < 60) {
-      triggerToast('INSUFFICIENT PROPELLANT FOR BURN');
-      return;
-    }
-
-    playThrusterPulse();
-    const fuelBurn = type === 'tcm1' ? 75 : type === 'tcm2' ? 95 : 140;
-    const missReduction = type === 'tcm1' ? 24000 : type === 'tcm2' ? 12000 : 5700;
-
-    updateG((prev) => ({
-      fuelKg: Math.max(0, prev.fuelKg - fuelBurn),
-      missDistanceKm: Math.max(80, prev.missDistanceKm - missReduction),
-      maneuversDone: { ...prev.maneuversDone, [type]: true },
-      toastMessage: `BURN COMPLETE: Miss distance reduced by ${missReduction.toLocaleString()} km!`,
-    }));
-  };
-
-  const handleExecuteScan = (instrument: string, costW: number, gainSci: number, gainGb: number) => {
-    if (g.safeMode) {
-      triggerToast('SAFE MODE ACTIVE: Instruments offline');
-      return;
-    }
-    if (g.dataBufferGb + gainGb > g.dataBufferMaxGb) {
-      triggerToast('DATA BUFFER FULL: Downlink to Earth first');
-      return;
-    }
-    if (g.batteryPct < 15) {
-      triggerToast('LOW BATTERY: Insufficient power for scan');
-      return;
-    }
-
+const Btn: React.FC<{
+  children?: React.ReactNode;
+  k?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  state?: string;
+  icon?: string;
+  cls?: string;
+  title?: string;
+  glow?: boolean;
+  sm?: boolean;
+}> = ({ children, k = 'primary', onClick, disabled, state, icon, cls = '', title, glow, sm }) => {
+  const handleClick = () => {
+    if (disabled) return;
     playTelemetryClick();
-    setTimeout(playSuccessChime, 600);
-
-    updateG((prev) => ({
-      sciencePoints: +(prev.sciencePoints + gainSci).toFixed(1),
-      dataBufferGb: +(prev.dataBufferGb + gainGb).toFixed(2),
-      batteryPct: Math.max(0, prev.batteryPct - costW * 0.4),
-      toastMessage: `SCAN SUCCESS (${instrument}): +${gainSci} Science, +${gainGb} GB`,
-    }));
+    if (onClick) onClick();
   };
 
-  const handleDownlinkData = () => {
-    const isDsnWindow = g.day % 30 < 22; // Open 22 out of 30 days
-    if (!isDsnWindow) {
-      triggerToast('NO DSN TRACKING WINDOW: Station out of line-of-sight');
-      return;
-    }
-    if (g.dataBufferGb <= 0.1) {
-      triggerToast('DATA BUFFER EMPTY: Nothing to downlink');
-      return;
-    }
+  const b = (
+    <button
+      type="button"
+      className={`btn ${k} ${state || ''} ${sm ? 'sm' : ''} ${cls}`}
+      disabled={disabled}
+      onClick={handleClick}
+      aria-label={title}
+    >
+      {icon && <Ic n={icon} s={18} />}
+      {children}
+    </button>
+  );
+  return glow ? <span className="breathe">{b}</span> : b;
+};
 
-    playTelemetryClick();
-    const amt = g.dataBufferGb;
-
-    // Simulate animated transmission
-    setTimeout(() => {
-      playSuccessChime();
-      updateG((prev) => ({
-        dataReturnedGb: +(prev.dataReturnedGb + amt).toFixed(2),
-        dataBufferGb: 0,
-        downlinksDone: prev.downlinksDone + 1,
-        toastMessage: `DOWNLINK SUCCESS: +${amt.toFixed(1)} GB streamed to Deep Space Network!`,
-      }));
-    }, 800);
-  };
-
-  const handleResolveCrisis = (crisisId: string, choice: 'safe' | 'counter' | 'push') => {
-    playTelemetryClick();
-    let healthImpact = 0;
-    let fuelImpact = 0;
-    let sciImpact = 0;
-    let summary = '';
-
-    if (crisisId === 'evt_solar_storm') {
-      const isRadHard = (g.selection[7] || 0) > 0; // Rad-Hard CPU installed
-      const hasActiveThermal = (g.selection[5] || 0) > 0;
-
-      if (choice === 'safe') {
-        summary = 'Autonomous Safe Mode engaged. Bus fully protected, science paused.';
-        healthImpact = isRadHard ? -2 : -6;
-      } else if (choice === 'counter') {
-        summary = 'Overdrove thermal pumped coolant to dump solar radiative spike.';
-        healthImpact = hasActiveThermal ? -4 : -16;
-      } else {
-        summary = 'Pushed science instruments through CME flux. Gathered exotic solar data!';
-        healthImpact = isRadHard ? -14 : -38;
-        sciImpact = 24;
-      }
-    } else if (crisisId === 'evt_micrometeoroid') {
-      const hasWhipple = (g.selection[0] || 0) === 2;
-      if (choice === 'counter') {
-        summary = 'Slewed spacecraft bus behind rocket engine bell.';
-        fuelImpact = 35;
-      } else if (choice === 'safe') {
-        summary = 'Folded solar panels edge-on.';
-        healthImpact = hasWhipple ? -3 : -12;
-      } else {
-        summary = 'Maintained standard orientation in debris field.';
-        healthImpact = hasWhipple ? -5 : -28;
-      }
-    } else {
-      // Reaction wheel
-      if (choice === 'counter') {
-        summary = 'Hydrazine thrusters compensated flywheel jitter.';
-        fuelImpact = 20;
-      } else if (choice === 'safe') {
-        summary = 'Desaturated flywheels gradually. Avoided thruster propellant burn.';
-        sciImpact = -5;
-      } else {
-        summary = 'Target imaging blurry due to flywheel jitter.';
-        sciImpact = 8;
-        healthImpact = -8;
-      }
-    }
-
-    if (healthImpact < -15) {
-      playWarningAlert();
-    } else {
-      playSuccessChime();
-    }
-
-    updateG((prev) => ({
-      healthPct: Math.max(0, +(prev.healthPct + healthImpact).toFixed(1)),
-      fuelKg: Math.max(0, prev.fuelKg - fuelImpact),
-      sciencePoints: Math.max(0, +(prev.sciencePoints + sciImpact).toFixed(1)),
-      resolvedEvents: [
-        ...prev.resolvedEvents,
-        { id: crisisId, choice, impact: summary },
-      ],
-      activeCrisis: null,
-      toastMessage: summary,
-    }));
-  };
-
-  // ==========================================================================
-  // RENDER APP SHELL & SCREENS
-  // ==========================================================================
+const Meter: React.FC<{
+  label: string;
+  v: number;
+  max?: number;
+  unit?: string;
+  d?: number;
+  warn?: number;
+  crit?: number;
+  inv?: boolean;
+  big?: boolean;
+  mark?: number;
+  st?: string;
+  hint?: string;
+}> = ({ label, v, max = 100, unit = '', d = 0, warn, crit, inv, big, mark, st, hint }) => {
+  const s = st ?? (warn != null ? lvl(v, warn, crit ?? 100, inv) : '');
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen min-h-[100dvh] bg-[#05070c] text-[#F3F6FA] select-none overflow-hidden">
-      {/* Desktop App Control Bar */}
-      {!isMobileDevice && (
-        <header className="mb-2 flex items-center gap-3 z-50 text-xs mono">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#151B26] border border-[#293342]">
-            <span className="h-2 w-2 rounded-full bg-[#00E676] animate-pulse" />
-            <span className="font-bold text-[#00E5FF]">MISSION: LAST LIGHT</span>
-          </div>
-
-          <button
-            type="button"
-            className="px-3 py-1 rounded-full bg-[#151B26] border border-[#293342] text-[#AAB4C3] hover:text-white cursor-pointer transition-colors"
-            onClick={() => {
-              const nextMuted = toggleAudio();
-              setMuted(nextMuted);
-            }}
-          >
-            {muted ? '🔇 MUTED' : '🔊 AUDIO ON'}
-          </button>
-
-          <button
-            type="button"
-            className="px-3 py-1 rounded-full bg-[#151B26] border border-[#293342] text-[#AAB4C3] hover:text-white cursor-pointer transition-colors"
-            onClick={() => setIsPhoneFrame(!isPhoneFrame)}
-          >
-            {isPhoneFrame ? '📱 PHONE FRAME' : '🖥️ FULLSCREEN'}
-          </button>
-        </header>
-      )}
-
-      {/* Mobile Device Frame Container */}
-      <main
-        style={
-          isPhoneFrame
-            ? { width: 393 * scaleFactor, height: 852 * scaleFactor }
-            : { width: '100%', height: '100dvh', maxWidth: '480px' }
-        }
-        className="transition-all duration-300"
-      >
-        <div
-          className={`relative overflow-hidden w-full h-full flex flex-col ${
-            isPhoneFrame
-              ? 'rounded-[38px] border border-[#293342] shadow-[0_0_80px_#00e5ff22]'
-              : ''
-          }`}
-          style={
-            isPhoneFrame
-              ? {
-                  width: 393,
-                  height: 852,
-                  background: 'linear-gradient(#080B12, #0D111A)',
-                  transform: `scale(${scaleFactor})`,
-                  transformOrigin: 'top center',
-                }
-              : { background: 'linear-gradient(#080B12, #0D111A)' }
-          }
-        >
-          {/* Top Mobile Status Header (Safe Area) */}
-          <div className="flex-none pt-3 px-5 flex justify-between items-center text-[10px] mono text-[#AAB4C3] z-30">
-            <span className="font-semibold text-white">NASA 12:00</span>
-            {isPhoneFrame && (
-              <div className="h-4 w-24 bg-[#05070C] rounded-full mx-auto" />
-            )}
-            <div className="flex items-center gap-1.5 text-[#00E5FF]">
-              <span>5G</span>
-              <span className="font-bold">■■■</span>
-            </div>
-          </div>
-
-          {/* Active Screen View */}
-          <div className="flex-1 relative overflow-hidden flex flex-col">
-            {g.screen === 'landing' && (
-              <ScreenLanding
-                onStart={() => updateG({ screen: 'brief' })}
-                onHow={() => updateG({ screen: 'how' })}
-                onNasa={() => updateG({ screen: 'nasa' })}
-                onRecords={() => updateG({ screen: 'board' })}
-              />
-            )}
-
-            {g.screen === 'how' && (
-              <ScreenHowToPlay
-                onStart={() => updateG({ screen: 'brief' })}
-                onBack={() => updateG({ screen: 'landing' })}
-              />
-            )}
-
-            {g.screen === 'brief' && (
-              <ScreenBriefing
-                onAccept={() => updateG({ screen: 'priorities' })}
-                onBack={() => updateG({ screen: 'landing' })}
-              />
-            )}
-
-            {g.screen === 'priorities' && (
-              <ScreenPriorities
-                priorities={g.priorities}
-                onUpdate={(p) => updateG({ priorities: p })}
-                onNext={() => updateG({ screen: 'design' })}
-                onBack={() => updateG({ screen: 'brief' })}
-              />
-            )}
-
-            {g.screen === 'design' && (
-              <ScreenDesignStudio
-                selection={g.selection}
-                totals={totals}
-                onSelectComponent={handleSelectComponent}
-                onNext={() => updateG({ screen: 'ready' })}
-                onBack={() => updateG({ screen: 'priorities' })}
-                onOpenCompare={(subIdx, optIdx) =>
-                  updateG({ compareSubsystemIndex: subIdx, compareOptionIndex: optIdx })
-                }
-              />
-            )}
-
-            {g.screen === 'ready' && (
-              <ScreenReadiness
-                mode={g.mode}
-                totals={totals}
-                onToggleMode={() =>
-                  updateG({ mode: g.mode === 'COMMANDER' ? 'ENGINEER' : 'COMMANDER' })
-                }
-                onNext={() => updateG({ screen: 'stress' })}
-                onBack={() => updateG({ screen: 'design' })}
-              />
-            )}
-
-            {g.screen === 'stress' && (
-              <ScreenStressTest
-                totals={totals}
-                selection={g.selection}
-                onLaunch={() => updateG({ screen: 'launch' })}
-                onRedesign={() => updateG({ screen: 'design' })}
-              />
-            )}
-
-            {g.screen === 'launch' && (
-              <ScreenLaunchCountdown
-                totals={totals}
-                onIgnitionComplete={() =>
-                  updateG({ screen: 'flight', day: 1, timeSpeed: 1 })
-                }
-              />
-            )}
-
-            {g.screen === 'flight' && (
-              <ScreenFlightSim
-                g={g}
-                totals={totals}
-                updateG={updateG}
-                onExecuteManeuver={handleExecuteManeuver}
-                onExecuteScan={handleExecuteScan}
-                onDownlink={handleDownlinkData}
-                onOpenRock={() => updateG({ screen: 'rock' })}
-              />
-            )}
-
-            {g.screen === 'rock' && (
-              <ScreenAsteroidSurvey
-                g={g}
-                updateG={updateG}
-                onBack={() => updateG({ screen: 'flight' })}
-              />
-            )}
-
-            {g.screen === 'debrief' && (
-              <ScreenDebrief
-                g={g}
-                totals={totals}
-                onRetry={() => updateG({ ...INITIAL_GAME_STATE, screen: 'design' })}
-                onHome={() => updateG({ ...INITIAL_GAME_STATE, screen: 'landing' })}
-                onLeaderboard={() => updateG({ screen: 'board' })}
-              />
-            )}
-
-            {g.screen === 'board' && (
-              <ScreenLeaderboard onBack={() => updateG({ screen: 'landing' })} />
-            )}
-
-            {g.screen === 'nasa' && (
-              <ScreenNasaDossier onBack={() => updateG({ screen: 'landing' })} />
-            )}
-          </div>
-
-          {/* Compare Sheet Overlay */}
-          {g.compareSubsystemIndex !== null && g.compareOptionIndex !== null && (
-            <ComponentCompareSheet
-              subIndex={g.compareSubsystemIndex}
-              candidateIndex={g.compareOptionIndex}
-              installedIndex={g.selection[g.compareSubsystemIndex] || 0}
-              onInstall={() =>
-                handleSelectComponent(g.compareSubsystemIndex!, g.compareOptionIndex!)
-              }
-              onClose={() =>
-                updateG({ compareSubsystemIndex: null, compareOptionIndex: null })
-              }
-            />
-          )}
-
-          {/* Active Flight Crisis Modal */}
-          {g.activeCrisis && (
-            <CrisisTriageModal
-              crisis={g.activeCrisis}
-              onResolve={(choice) => handleResolveCrisis(g.activeCrisis!.id, choice)}
-            />
-          )}
-
-          {/* Safe Mode Active Caution Banner */}
-          {g.safeMode && (
-            <div
-              className="pointer-events-none absolute inset-0 z-40"
-              style={{
-                background:
-                  'repeating-linear-gradient(0deg, #ffab0020 0 2px, transparent 2px 6px), #ffab0012',
-                boxShadow: 'inset 0 0 60px #FFAB0066',
-              }}
-            >
-              <div className="mono absolute top-8 w-full text-center text-[10px] font-bold text-[#FFAB00] tracking-widest animate-pulse">
-                ⚠ AUTONOMOUS SAFE MODE ACTIVE
-              </div>
-            </div>
-          )}
-
-          {/* Toast Notification Banner */}
-          {g.toastMessage && (
-            <div className="mono absolute left-4 right-4 top-10 z-50 rounded-xl border border-[#00E5FF] bg-[#0D111Aee] backdrop-blur-md p-3 text-center text-xs text-[#F3F6FA] shadow-[0_0_25px_#00e5ff55] animate-bounce">
-              {g.toastMessage}
-            </div>
-          )}
-        </div>
-      </main>
+    <div className={`meter ${s} ${big ? 'big' : ''}`}>
+      <div className="top">
+        <span className="lab">{label}</span>
+        <span className="val">
+          <Num v={v} d={d} />
+          {unit}
+          {hint && <span className="dim"> {hint}</span>}
+        </span>
+      </div>
+      <div className="bar">
+        <div className="fill" style={{ width: clamp((v / max) * 100, 0, 100) + '%' }} />
+        {mark != null && <div className="mk" style={{ left: clamp((mark / max) * 100, 0, 100) + '%' }} />}
+      </div>
     </div>
   );
 };
 
-// ============================================================================
-// 1. SCREEN: LANDING
-// ============================================================================
-const ScreenLanding: React.FC<{
-  onStart: () => void;
-  onHow: () => void;
-  onNasa: () => void;
-  onRecords: () => void;
-}> = ({ onStart, onHow, onNasa, onRecords }) => (
-  <div className="flex h-full flex-col items-center justify-between p-6 pt-10 pb-8">
-    <div className="fl h-48 w-64 flex items-center justify-center">
-      <SpacecraftSvg s={1.1} />
+const Slider: React.FC<{
+  v: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange: (v: number) => void;
+  label: string;
+  disabled?: boolean;
+  id?: string;
+}> = ({ v, min = 0, max = 100, step = 1, onChange, label, disabled, id }) => {
+  const [drag, setDrag] = useState(false);
+  const f = (v - min) / (max - min);
+  const lv = f < 0.34 ? 'low' : f < 0.67 ? 'med' : 'high';
+  return (
+    <input
+      id={id}
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={v}
+      disabled={disabled}
+      aria-label={label}
+      className={`sl ${lv} ${drag ? 'drag' : ''}`}
+      style={{ '--p': f * 100 + '%' } as any}
+      onPointerDown={() => setDrag(true)}
+      onPointerUp={() => setDrag(false)}
+      onBlur={() => setDrag(false)}
+      onChange={e => onChange(+e.target.value)}
+    />
+  );
+};
+
+const PHead: React.FC<{ n: number; title: string; sub?: string; right?: React.ReactNode }> = ({
+  n,
+  title,
+  sub,
+  right
+}) => (
+  <div className="phead rise">
+    <div>
+      <div className="pidx">{pad(n)} / 20</div>
+      <h1>{title}</h1>
+      {sub && <p>{sub}</p>}
     </div>
+    {right}
+  </div>
+);
 
-    <div className="text-center my-auto">
-      <div className="text-[28px] font-extrabold tracking-tight text-[#F3F6FA] leading-tight">
-        MISSION: LAST LIGHT
-      </div>
-      <div className="mono mt-2 text-xs tracking-widest text-[#00E5FF] font-semibold">
-        DESIGN · STRESS-TEST · ADAPT · SURVIVE
-      </div>
-      <p className="mt-3 text-xs text-[#AAB4C3] max-w-xs mx-auto leading-relaxed">
-        Deep-space asteroid engineering simulator. Balance mass, power, and budget to conquer the hazards of the solar system.
-      </p>
-    </div>
-
-    <div className="w-full space-y-2.5 pb-2">
-      <button
-        type="button"
-        className="btn p cursor-pointer"
-        onClick={() => {
-          playSuccessChime();
-          onStart();
-        }}
-      >
-        START MISSION
-      </button>
-
-      <button
-        type="button"
-        className="btn cursor-pointer"
-        onClick={() => {
-          playTelemetryClick();
-          onHow();
-        }}
-      >
-        HOW TO PLAY
-      </button>
-
-      <div className="flex gap-2">
-        <button
-          type="button"
-          className="btn flex-1 text-xs cursor-pointer"
-          onClick={() => {
-            playTelemetryClick();
-            onNasa();
-          }}
-        >
-          NASA SCIENCE
-        </button>
-        <button
-          type="button"
-          className="btn flex-1 text-xs cursor-pointer"
-          onClick={() => {
-            playTelemetryClick();
-            onRecords();
-          }}
-        >
-          RECORDS
-        </button>
-      </div>
-    </div>
+const Tele: React.FC<{ label: string; v: number; unit?: string; st?: string; d?: number }> = ({
+  label,
+  v,
+  unit,
+  st = 'Nominal',
+  d = 0
+}) => (
+  <div className={'tele ' + st}>
+    <span className="lab">{label}</span>
+    <span className="v">
+      <Num v={v} d={d} />
+      {unit && <small className="dim"> {unit}</small>}
+    </span>
+    <span
+      className="state"
+      style={{
+        color: st === 'Nominal' ? 'var(--green)' : st === 'Warning' ? 'var(--amber)' : st === 'Critical' ? 'var(--red)' : 'var(--faint)'
+      }}
+    >
+      {st.toUpperCase()}
+    </span>
   </div>
 );
 
 // ============================================================================
-// 2. SCREEN: HOW TO PLAY
+// CANVAS & SVG ARTWORK
 // ============================================================================
-const ScreenHowToPlay: React.FC<{ onStart: () => void; onBack: () => void }> = ({
-  onStart,
-  onBack,
-}) => {
-  const [step, setStep] = useState(0);
-  const slides = [
-    {
-      title: 'Design Spacecraft',
-      desc: 'Pick components across 8 subsystems: Structure, Propulsion, Power, Comms, Science, Thermal, Nav, and Computing.',
-      icon: '🛠️',
-    },
-    {
-      title: 'Balance Trade-Offs',
-      desc: 'Mass, power, budget, and delta-V are constantly in tension. High-performance components add mass and drain dollars.',
-      icon: '⚖️',
-    },
-    {
-      title: 'Stress-Test Hazards',
-      desc: 'Subject your build to 8 pre-flight hazards: solar flares, micrometeoroids, and deep-space thermal soak.',
-      icon: '⚡',
-    },
-    {
-      title: 'Command Real Flight',
-      desc: 'Pilot a 146-day transit to ASTERIA-1: time your burns, balance your power grid, and stream data to the Deep Space Network.',
-      icon: '🛸',
-    },
-    {
-      title: 'Asteroid Proximity',
-      desc: 'Brake into proximity orbit, survey craters in 3D, resolve emergency crises, and safely return high-value science to Earth.',
-      icon: '🪐',
-    },
-  ];
 
-  return (
-    <div className="flex h-full flex-col justify-between p-6 pt-6 pb-8">
-      <div className="flex justify-between items-center mb-2">
-        <span className="mono text-xs text-[#00E5FF] font-bold">MANUAL {step + 1}/5</span>
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-xs text-[#AAB4C3] hover:text-white cursor-pointer"
-        >
-          SKIP
-        </button>
-      </div>
+const WARP = { v: 1, t: 1 };
 
-      <div className="card my-auto h-72 flex flex-col items-center justify-center text-center p-6 border-[#00E5FF]/40">
-        <div className="text-4xl mb-4">{slides[step].icon}</div>
-        <div className="text-xl font-bold text-white mb-2">{slides[step].title}</div>
-        <p className="text-xs text-[#AAB4C3] leading-relaxed max-w-xs">{slides[step].desc}</p>
-      </div>
+function Starfield({ sc }: { sc: number }) {
+  const cv = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    const c = cv.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    const pr = clamp(sc * (window.devicePixelRatio || 1), 1, 2);
+    c.width = 1280 * pr;
+    c.height = 720 * pr;
+    ctx.setTransform(pr, 0, 0, pr, 0, 0);
 
-      <div className="flex justify-center gap-2 mb-6">
-        {slides.map((_, i) => (
-          <button
-            key={i}
-            type="button"
-            className="h-2 rounded-full transition-all cursor-pointer"
-            style={{
-              width: i === step ? '24px' : '8px',
-              background: i === step ? '#00E5FF' : '#293342',
-            }}
-            onClick={() => setStep(i)}
-          />
-        ))}
-      </div>
+    const mk = (near: boolean) => {
+      const a = Math.random() * 6.283;
+      const r = near ? rnd(20, 120) : Math.sqrt(Math.random()) * 760;
+      return { x: 640 + Math.cos(a) * r, y: 360 + Math.sin(a) * r * 0.56, d: rnd(0.2, 1), px: 0, py: 0 };
+    };
 
-      <div className="space-y-2">
-        {step < 4 ? (
-          <button
-            type="button"
-            className="btn p cursor-pointer"
-            onClick={() => {
-              playTelemetryClick();
-              setStep(step + 1);
-            }}
-          >
-            NEXT
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn p cursor-pointer"
-            onClick={() => {
-              playSuccessChime();
-              onStart();
-            }}
-          >
-            START MISSION
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
+    const stars = Array.from({ length: RM ? 90 : 150 }, () => mk(false));
+    let raf: number;
+    let last = performance.now();
 
-// ============================================================================
-// 3. SCREEN: MISSION BRIEFING
-// ============================================================================
-const ScreenBriefing: React.FC<{ onAccept: () => void; onBack: () => void }> = ({
-  onAccept,
-  onBack,
-}) => {
-  const [showConstraints, setShowConstraints] = useState(true);
+    const draw = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      WARP.v = lerp(WARP.v, WARP.t, Math.min(1, dt * 3));
+      ctx.clearRect(0, 0, 1280, 720);
+      const w = WARP.v - 1;
 
-  return (
-    <div className="flex h-full flex-col justify-between p-5 pt-4 pb-8 overflow-y-auto no-scrollbar">
-      <div>
-        <div className="flex justify-center mb-2">
-          <svg viewBox="-60 -60 120 120" width="110" height="110">
-            <g className="sp">
-              <circle r="46" fill="none" stroke="#00E5FF" strokeWidth="1.5" />
-              <ellipse rx="46" ry="16" fill="none" stroke="#00E5FF" strokeWidth="1" opacity="0.6" />
-              <ellipse rx="16" ry="46" fill="none" stroke="#00E5FF" strokeWidth="1" opacity="0.6" />
-            </g>
-            <circle cx="0" cy="0" r="8" fill="#FFAB00" />
-          </svg>
-        </div>
-
-        <div className="mono text-center text-xs text-[#00E5FF] font-bold mb-1">
-          TARGET: ASTERIA-1 (101955 BENNU CLASS)
-        </div>
-        <div className="text-center text-[11px] text-[#AAB4C3] mb-4">
-          Ø 1.2 km Rubble-pile · 1.2 AU Heliocentric Orbit · 146 Days Transit
-        </div>
-
-        <div className="card mb-3">
-          <div className="text-xs font-bold text-white mb-2 tracking-wide">
-            MISSION DIRECTIVES
-          </div>
-          <div className="space-y-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-[#00E5FF] font-bold">✓</span>
-              <span>
-                <b className="text-[#00E5FF]">Primary:</b> Rendezvous miss distance &lt; 500 km
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[#00E5FF] font-bold">✓</span>
-              <span>
-                <b className="text-[#00E5FF]">Primary:</b> Acquire ≥ 60 scientific survey points
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[#AAB4C3] font-bold">✓</span>
-              <span>
-                <b className="text-[#AAB4C3]">Secondary:</b> Return ≥ 15 GB data via DSN
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[#AAB4C3] font-bold">✓</span>
-              <span>
-                <b className="text-[#AAB4C3]">Secondary:</b> Spacecraft bus integrity &gt; 40%
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="card mb-4">
-          <div
-            className="flex justify-between items-center text-xs font-bold text-white cursor-pointer"
-            onClick={() => setShowConstraints(!showConstraints)}
-          >
-            <span>ENGINEERING FLIGHT CONSTRAINTS</span>
-            <span className="mono text-[#00E5FF]">{showConstraints ? '−' : '+'}</span>
-          </div>
-          {showConstraints && (
-            <div className="mono text-xs text-[#AAB4C3] space-y-1.5 pt-2 border-t border-[#293342]/60 mt-1">
-              <div className="flex justify-between">
-                <span>Maximum Dry Mass:</span>
-                <b className="text-white">≤ 2,500 kg</b>
-              </div>
-              <div className="flex justify-between">
-                <span>Discovery Budget Cap:</span>
-                <b className="text-white">≤ $50.0M</b>
-              </div>
-              <div className="flex justify-between">
-                <span>Power Bus Envelope:</span>
-                <b className="text-white">≤ 100 W</b>
-              </div>
-              <div className="flex justify-between">
-                <span>Required Interplanetary Δv:</span>
-                <b className="text-white">≥ 1,200 m/s</b>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-2 mt-auto">
-        <button
-          type="button"
-          className="btn p cursor-pointer"
-          onClick={() => {
-            playSuccessChime();
-            onAccept();
-          }}
-        >
-          ACCEPT MISSION
-        </button>
-        <button
-          type="button"
-          className="btn text-xs cursor-pointer"
-          onClick={onBack}
-        >
-          BACK
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
-// 4. SCREEN: MISSION PRIORITIES
-// ============================================================================
-const ScreenPriorities: React.FC<{
-  priorities: { science: number; survivability: number; affordability: number };
-  onUpdate: (p: { science: number; survivability: number; affordability: number }) => void;
-  onNext: () => void;
-  onBack: () => void;
-}> = ({ priorities, onUpdate, onNext, onBack }) => {
-  const levels = ['CONSERVATIVE', 'BALANCED', 'MAXIMUM'];
-
-  return (
-    <div className="flex h-full flex-col justify-between p-5 pt-6 pb-8">
-      <div>
-        <div className="text-xl font-bold text-white mb-1">Flight Doctrine</div>
-        <p className="text-xs text-[#AAB4C3] mb-6">
-          Set your engineering priorities. High science demands heavy payloads, while survivability requires reinforced shielding.
-        </p>
-
-        <div className="space-y-4">
-          {[
-            { key: 'science', label: 'SCIENCE PAYLOAD EMPHASIS' },
-            { key: 'survivability', label: 'HAZARD SURVIVABILITY MARGIN' },
-            { key: 'affordability', label: 'FISCAL DISCIPLINE (BUDGET)' },
-          ].map(({ key, label }) => (
-            <div key={key} className="card">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-xs font-semibold text-white">{label}</span>
-                <b className="mono text-xs text-[#00E5FF]">
-                  {levels[(priorities as any)[key]]}
-                </b>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                value={(priorities as any)[key]}
-                onChange={(e) =>
-                  onUpdate({ ...priorities, [key]: parseInt(e.target.value, 10) })
-                }
-              />
-              <div className="mono flex justify-between text-[10px] text-[#6F7B8C]">
-                <span>LOW</span>
-                <span>MED</span>
-                <span>HIGH</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-2 mt-auto">
-        <button
-          type="button"
-          className="btn p cursor-pointer"
-          onClick={() => {
-            playTelemetryClick();
-            onNext();
-          }}
-        >
-          CONTINUE TO DESIGN
-        </button>
-        <button
-          type="button"
-          className="btn text-xs cursor-pointer"
-          onClick={onBack}
-        >
-          BACK
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
-// 5. SCREEN: SPACECRAFT DESIGN STUDIO
-// ============================================================================
-const ScreenDesignStudio: React.FC<{
-  selection: Record<number, number>;
-  totals: CraftTotals;
-  onSelectComponent: (subIndex: number, optIndex: number) => void;
-  onNext: () => void;
-  onBack: () => void;
-  onOpenCompare: (subIndex: number, optIndex: number) => void;
-}> = ({ selection, totals, onSelectComponent, onNext, onBack, onOpenCompare }) => {
-  const [activeTab, setActiveTab] = useState(0);
-  const activeSub = SUBSYSTEMS[activeTab];
-  const installedIdx = selection[activeTab] || 0;
-
-  return (
-    <div className="flex h-full flex-col relative select-none">
-      {/* Top Telemetry Badges */}
-      <div className="flex-none p-3 pb-1" style={{ height: '36%' }}>
-        <div className="grid grid-cols-4 gap-1.5 mb-2">
-          <div className="pill mono text-[10px] flex-col p-1">
-            <span className="text-[#AAB4C3]">Mass</span>
-            <b className={totals.isMassValid ? 'text-white' : 'up'}>
-              {totals.massKg}kg
-            </b>
-          </div>
-          <div className="pill mono text-[10px] flex-col p-1">
-            <span className="text-[#AAB4C3]">Power</span>
-            <b className={totals.isPowerValid ? 'text-white' : 'up'}>
-              {totals.powerW}W
-            </b>
-          </div>
-          <div className="pill mono text-[10px] flex-col p-1">
-            <span className="text-[#AAB4C3]">Budget</span>
-            <b className={totals.isBudgetValid ? 'text-white' : 'up'}>
-              ${totals.costM}M
-            </b>
-          </div>
-          <div className="pill mono text-[10px] flex-col p-1">
-            <span className="text-[#AAB4C3]">Δv</span>
-            <b className={totals.isDvValid ? 'dn' : 'up'}>
-              {totals.dvMs}m/s
-            </b>
-          </div>
-        </div>
-
-        {/* Spacecraft Visual with clickable hotspot pins */}
-        <div className="h-[75%] flex items-center justify-center">
-          <SpacecraftSvg onPin={(idx) => setActiveTab(idx)} activeTab={activeTab} />
-        </div>
-      </div>
-
-      {/* Horizontal Subsystem Tabs */}
-      <div className="flex flex-none gap-2 overflow-x-auto px-3 pb-2 no-scrollbar">
-        {SUBSYSTEMS.map((sub, i) => (
-          <button
-            key={sub.id}
-            type="button"
-            onClick={() => {
-              playTelemetryClick();
-              setActiveTab(i);
-            }}
-            className="pill min-h-[36px] px-3 whitespace-nowrap text-xs font-semibold cursor-pointer transition-colors"
-            style={{
-              borderColor: i === activeTab ? '#00E5FF' : '#293342',
-              color: i === activeTab ? '#00E5FF' : '#AAB4C3',
-              background: i === activeTab ? '#00E5FF1a' : '#0D111Acc',
-            }}
-          >
-            <span className="mr-1">{sub.icon}</span> {sub.name}
-          </button>
-        ))}
-      </div>
-
-      {/* Component Options List */}
-      <div className="flex-1 space-y-2 overflow-y-auto px-3 pb-24 no-scrollbar">
-        {activeSub.options.map((opt, i) => (
-          <div
-            key={opt.id}
-            className="card transition-all"
-            style={{ borderColor: i === installedIdx ? '#00E5FF' : '#293342' }}
-          >
-            <div className="flex justify-between items-center mb-1">
-              <b className="text-white text-xs font-bold">{opt.name}</b>
-              <span className="mono text-[10px] text-[#AAB4C3]">
-                {opt.mass >= 0 ? `+${opt.mass}` : opt.mass}kg · {opt.cost > 0 ? `+$${opt.cost}M` : '$0M'}
-              </span>
-            </div>
-            <p className="text-[11px] text-[#AAB4C3] mb-1">{opt.desc}</p>
-            <div className="mono text-[9px] text-[#6F7B8C] mb-2">{opt.spec}</div>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className={`btn flex-1 text-xs min-h-[38px] cursor-pointer ${
-                  i === installedIdx ? 'off' : 'p'
-                }`}
-                onClick={() => onSelectComponent(activeTab, i)}
-              >
-                {i === installedIdx ? '✓ INSTALLED' : 'INSTALL'}
-              </button>
-
-              <button
-                type="button"
-                className="btn flex-1 text-xs min-h-[38px] cursor-pointer"
-                onClick={() => {
-                  playTelemetryClick();
-                  onOpenCompare(activeTab, i);
-                }}
-              >
-                COMPARE
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Bottom Sticky Action */}
-      <div className="absolute bottom-3 left-3 right-3 z-10">
-        <button
-          type="button"
-          className="btn p cursor-pointer"
-          onClick={() => {
-            playTelemetryClick();
-            onNext();
-          }}
-        >
-          MISSION READINESS REVIEW
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
-// 6. SCREEN: FLIGHT READINESS
-// ============================================================================
-const ScreenReadiness: React.FC<{
-  mode: 'COMMANDER' | 'ENGINEER';
-  totals: CraftTotals;
-  onToggleMode: () => void;
-  onNext: () => void;
-  onBack: () => void;
-}> = ({ mode, totals, onToggleMode, onNext, onBack }) => {
-  const r = totals.reliabilityPct;
-  const col = r >= 80 ? '#00E676' : r >= 60 ? '#FFAB00' : '#FF1744';
-
-  return (
-    <div className="flex h-full flex-col justify-between p-4 pb-8 overflow-y-auto no-scrollbar">
-      <div>
-        <div className="flex justify-between items-center mb-2">
-          <div className="text-lg font-bold text-white">Flight Readiness</div>
-          <button
-            type="button"
-            className="pill text-xs font-semibold border-[#00E5FF] text-[#00E5FF] cursor-pointer"
-            onClick={onToggleMode}
-          >
-            MODE: {mode}
-          </button>
-        </div>
-
-        {/* Circular Gauge */}
-        <div className="my-3 flex justify-center">
-          <svg viewBox="0 0 120 120" width="150" height="150">
-            <circle cx="60" cy="60" r="50" fill="none" stroke="#293342" strokeWidth="10" />
-            <circle
-              cx="60"
-              cy="60"
-              r="50"
-              fill="none"
-              stroke={col}
-              strokeWidth="10"
-              strokeDasharray={`${(r * 3.14).toFixed(1)} 314`}
-              transform="rotate(-90 60 60)"
-              strokeLinecap="round"
-              style={{ transition: 'all .6s ease-out' }}
-            />
-            <text
-              x="60"
-              y="68"
-              textAnchor="middle"
-              fill="#F3F6FA"
-              fontSize="24"
-              className="mono font-bold"
-            >
-              {r}%
-            </text>
-          </svg>
-        </div>
-
-        {!totals.isFlightReady && (
-          <div className="card mb-3 bl border-[#FF1744] text-[#FF1744] text-xs font-bold text-center">
-            ⚠ HARD CONSTRAINT VIOLATION: Review Mass, Power, or Budget!
-          </div>
-        )}
-
-        <ProgressBar label="Power Bus Envelope" value={100 - totals.powerW + 20} color="#00E676" />
-        <ProgressBar label="Structural Payload Margin" value={(2500 - totals.massKg) / 5} />
-        <ProgressBar label="Propulsion Margin (Δv)" value={(totals.dvMs / 1600) * 100} />
-        <ProgressBar label="Hardware Reliability" value={totals.reliabilityPct} color={col} />
-        <ProgressBar label="Fiscal Contingency Reserve" value={totals.budgetRemainingM * 4} color="#FFAB00" />
-
-        {mode === 'ENGINEER' && (
-          <div className="card mono text-[11px] text-[#AAB4C3] mt-3 space-y-1">
-            <div>Interplanetary Δv: {totals.dvMs} m/s (Target 1,200 m/s)</div>
-            <div>Dry Mass: {totals.massKg} kg · Bus Load: {totals.powerW} W</div>
-            <div>Radiation Tolerance: {totals.radTolKrad} krad (Si equivalent)</div>
-            <div>Remaining Reserve: ${totals.budgetRemainingM}M out of $50M</div>
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-2 mt-4">
-        <button
-          type="button"
-          className="btn p cursor-pointer"
-          onClick={() => {
-            playTelemetryClick();
-            onNext();
-          }}
-        >
-          CONTINUE TO STRESS TEST
-        </button>
-        <button
-          type="button"
-          className="btn text-xs cursor-pointer"
-          onClick={onBack}
-        >
-          BACK TO DESIGN
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
-// 7. SCREEN: STRESS TEST
-// ============================================================================
-const ScreenStressTest: React.FC<{
-  totals: CraftTotals;
-  selection: Record<number, number>;
-  onLaunch: () => void;
-  onRedesign: () => void;
-}> = ({ totals, selection, onLaunch, onRedesign }) => {
-  const [selectedHazard, setSelectedHazard] = useState(0);
-  const [testState, setTestState] = useState<{ active?: boolean; damage?: number; outcome?: string }>({});
-
-  const hazard = STRESS_HAZARDS[selectedHazard];
-
-  const runTest = () => {
-    playWarningAlert();
-    setTestState({ active: true });
-
-    setTimeout(() => {
-      // Dynamic damage calculation based on installed components
-      let penalty = hazard.penalty;
-      if (hazard.sub === 'computing' && (selection[7] || 0) > 0) penalty -= 18;
-      if (hazard.sub === 'structure' && (selection[0] || 0) === 2) penalty -= 20;
-      if (hazard.sub === 'thermal' && (selection[5] || 0) > 0) penalty -= 16;
-      if (hazard.sub === 'power' && (selection[2] || 0) > 0) penalty -= 14;
-
-      const dmg = Math.max(4, Math.round(penalty * 0.9));
-      const score = Math.max(30, totals.reliabilityPct - dmg);
-      const outcome =
-        score >= 70
-          ? 'SURVIVES NOMINAL'
-          : score >= 48
-          ? 'SURVIVES WITH DEGRADATION'
-          : 'CRITICAL FAILURE';
-
-      if (score >= 70) {
-        playSuccessChime();
-      } else {
-        playWarningAlert();
+      for (const s of stars) {
+        s.px = s.x;
+        s.py = s.y;
+        if (!RM) {
+          s.x -= s.d * 9 * dt;
+          if (w > 0.05) {
+            s.x = 640 + (s.x - 640) * (1 + dt * w * 0.9);
+            s.y = 360 + (s.y - 360) * (1 + dt * w * 0.9);
+          }
+        }
+        if (s.x < -10 || s.x > 1290 || s.y < -10 || s.y > 730) {
+          if (w > 0.5) {
+            Object.assign(s, mk(true));
+            s.px = s.x;
+            s.py = s.y;
+          } else {
+            s.x = 1285;
+            s.y = rnd(0, 720);
+            s.px = s.x;
+            s.py = s.y;
+          }
+        }
+        ctx.strokeStyle = `rgba(190,235,255,${0.25 + s.d * 0.65})`;
+        ctx.lineWidth = 0.6 + s.d * 1.1;
+        ctx.beginPath();
+        ctx.moveTo(w > 0.5 ? s.px : s.x, w > 0.5 ? s.py : s.y);
+        ctx.lineTo(s.x + 0.01, s.y);
+        ctx.stroke();
       }
+      raf = requestAnimationFrame(draw);
+    };
 
-      setTestState({ active: false, damage: dmg, outcome });
-    }, 1200);
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [Math.round(sc * 4)]);
+
+  return <canvas ref={cv} className="stars" aria-hidden="true" />;
+}
+
+const Craft = memo(function Craft({
+  d,
+  burn,
+  hl,
+  sway,
+  scale = 1
+}: {
+  d?: Design;
+  burn?: boolean;
+  hl?: string;
+  sway?: boolean;
+  scale?: number;
+}) {
+  const cur = d || DEF_DESIGN;
+  const pw = cur.power === 'solarL' ? 70 : cur.power === 'solarS' ? 46 : 0;
+  const rtg = cur.power === 'rtg';
+
+  const panel = (top: boolean) => {
+    if (!pw) return null;
+    const y = top ? 130 - 34 - pw : 130 + 34;
+    const lines = [];
+    for (let i = 1; i < 5; i++) {
+      lines.push(<line key={i} x1={170 + i * 22} x2={170 + i * 22} y1={y} y2={y + pw} stroke="#1d6a8a" strokeWidth="1" />);
+    }
+    return (
+      <g>
+        <rect x="170" y={y} width="110" height={pw} fill="#0b2a47" stroke="#2fb4d6" strokeWidth="1.4" />
+        {lines}
+        <line x1="170" x2="280" y1={y + pw / 2} y2={y + pw / 2} stroke="#1d6a8a" />
+      </g>
+    );
+  };
+
+  const ins = cur.instr || [];
+
+  return (
+    <svg viewBox="0 0 440 260" width={440 * scale} height={260 * scale} role="img" aria-label="Spacecraft schematic" style={{ overflow: 'visible' }}>
+      <defs>
+        <linearGradient id="busg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#173250" />
+          <stop offset="1" stopColor="#0c1a2d" />
+        </linearGradient>
+      </defs>
+      <g className={sway ? 'floaty' : ''}>
+        <g key={'p' + cur.power} className={'snap ' + (hl === 'power' ? 'hl' : '')} style={{ filter: hl === 'power' ? 'drop-shadow(0 0 8px #46e0ff)' : 'none' }}>
+          {panel(true)}
+          {panel(false)}
+          {rtg && (
+            <g>
+              <rect x="200" y="166" width="60" height="22" rx="4" fill="#3a2a16" stroke="#ffb23e" />
+              {[0, 1, 2, 3, 4].map(i => (
+                <line key={i} x1={208 + i * 11} x2={208 + i * 11} y1="166" y2="188" stroke="#ffb23e" opacity="0.6" />
+              ))}
+            </g>
+          )}
+        </g>
+        <g key={'s' + cur.struct} className="snap" style={{ filter: hl === 'struct' ? 'drop-shadow(0 0 8px #46e0ff)' : 'none' }}>
+          <rect x="150" y="96" width="150" height="68" rx="6" fill="url(#busg)" stroke="#46e0ff" strokeWidth="1.6" />
+          {cur.struct === 'ti' && (
+            <g stroke="#46e0ff" strokeOpacity="0.5">
+              <line x1="150" y1="96" x2="300" y2="164" />
+              <line x1="150" y1="164" x2="300" y2="96" />
+            </g>
+          )}
+          {cur.struct === 'cc' && (
+            <g stroke="#46e0ff" strokeOpacity="0.5">
+              <line x1="150" y1="112" x2="300" y2="112" />
+              <line x1="150" y1="148" x2="300" y2="148" />
+            </g>
+          )}
+          {cur.struct === 'al' && <line x1="150" y1="130" x2="300" y2="130" stroke="#46e0ff" strokeOpacity="0.4" />}
+        </g>
+        <g key={'e' + cur.prop} className="snap" style={{ filter: hl === 'prop' ? 'drop-shadow(0 0 8px #46e0ff)' : 'none' }}>
+          {cur.prop === 'chem' && <path d="M150 108 L112 90 L112 170 L150 152Z" fill="#14263c" stroke="#8da6c2" />}
+          {cur.prop === 'hall' && (
+            <g>
+              <rect x="126" y="102" width="24" height="18" fill="#14263c" stroke="#8da6c2" />
+              <rect x="126" y="140" width="24" height="18" fill="#14263c" stroke="#8da6c2" />
+            </g>
+          )}
+          {cur.prop === 'ion' && (
+            <g>
+              <circle cx="136" cy="130" r="26" fill="#14263c" stroke="#8da6c2" />
+              <circle cx="136" cy="130" r="16" fill="none" stroke="#46e0ff" strokeDasharray="3 3" />
+            </g>
+          )}
+          {burn && (
+            <path
+              className="flame"
+              d={
+                cur.prop === 'ion'
+                  ? 'M110 130 L40 126 L40 134Z'
+                  : cur.prop === 'hall'
+                  ? 'M126 111 L60 108 L60 114Z M126 149 L60 146 L60 152Z'
+                  : 'M112 130 L20 118 L20 142Z'
+              }
+              fill={cur.prop === 'ion' ? '#7aa8ff' : '#ffb23e'}
+              opacity="0.95"
+            />
+          )}
+        </g>
+        <g key={'h' + cur.shield} className="snap" style={{ filter: hl === 'shield' ? 'drop-shadow(0 0 8px #ffb23e)' : 'none' }}>
+          {cur.shield !== 'none' && (
+            <rect x={300} y="92" width={cur.shield === 'heavy' ? 16 : 7} height="76" fill="#3a2a16" stroke="#ffb23e" />
+          )}
+        </g>
+        <g key={'c' + cur.comms} className="snap" style={{ filter: hl === 'comms' ? 'drop-shadow(0 0 8px #46e0ff)' : 'none' }}>
+          {cur.comms === 'hga' ? (
+            <g>
+              <line x1="225" y1="96" x2="225" y2="70" stroke="#8da6c2" />
+              <g className="rot slow">
+                <path d="M200 62 Q225 86 250 62" fill="none" stroke="#46e0ff" strokeWidth="2.5" />
+                <line x1="225" y1="62" x2="225" y2="50" stroke="#46e0ff" />
+              </g>
+            </g>
+          ) : (
+            <g>
+              <line x1="225" y1="96" x2="225" y2="60" stroke="#46e0ff" strokeWidth="2" />
+              <circle cx="225" cy="58" r="3" fill="#46e0ff" />
+            </g>
+          )}
+        </g>
+        <g key={'i' + ins.join('')} className="snap" style={{ filter: hl === 'instr' ? 'drop-shadow(0 0 8px #46e0ff)' : 'none' }}>
+          {ins.map((id, i) => (
+            <g key={id}>
+              <line x1="316" y1={108 + i * 13} x2={340 + i * 8} y2={108 + i * 13} stroke="#8da6c2" />
+              <circle cx={344 + i * 8} cy={108 + i * 13} r="4.5" fill="#0c1a2d" stroke="#5cf2b0" />
+            </g>
+          ))}
+        </g>
+      </g>
+    </svg>
+  );
+});
+
+const Asteria = memo(function Asteria({ size = 260, scan, rot = true }: { size?: number; scan?: boolean; rot?: boolean }) {
+  return (
+    <svg viewBox="-110 -110 220 220" width={size} height={size} role="img" aria-label="Asteroid ASTERIA-1">
+      <defs>
+        <radialGradient id="agr" cx="0.35" cy="0.3">
+          <stop offset="0" stopColor="#7a8ea4" />
+          <stop offset="1" stopColor="#1a2433" />
+        </radialGradient>
+      </defs>
+      <g className={rot ? 'rot slow' : ''}>
+        <path
+          d="M-84 -20 C-90 -60 -40 -90 5 -86 C55 -90 92 -52 88 -6 C94 40 52 86 -2 84 C-52 92 -92 52 -84 -20Z"
+          fill="url(#agr)"
+          stroke="#8da6c2"
+          strokeOpacity="0.45"
+        />
+        <circle cx="-30" cy="-32" r="17" fill="#1b2635" stroke="#5d7189" strokeOpacity="0.6" />
+        <circle cx="38" cy="-8" r="11" fill="#1b2635" stroke="#5d7189" strokeOpacity="0.6" />
+        <circle cx="-8" cy="38" r="21" fill="#1b2635" stroke="#5d7189" strokeOpacity="0.6" />
+        <circle cx="52" cy="40" r="7" fill="#1b2635" stroke="#5d7189" strokeOpacity="0.6" />
+        <circle cx="-58" cy="18" r="8" fill="#1b2635" stroke="#5d7189" strokeOpacity="0.6" />
+      </g>
+      {scan && <circle className="scanring" r="100" />}
+    </svg>
+  );
+});
+
+function Exhaust({ on }: { on: React.MutableRefObject<boolean> }) {
+  const cv = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    const c = cv.current;
+    if (!c) return;
+    const x = c.getContext('2d');
+    if (!x) return;
+    const ps: any[] = [];
+    let raf: number;
+    const f = () => {
+      x.clearRect(0, 0, 300, 420);
+      if (on.current && !RM) {
+        for (let i = 0; i < 4; i++) {
+          ps.push({ x: 150 + rnd(-8, 8), y: 60, vx: rnd(-1.6, 1.6), vy: rnd(3, 6), l: 1 });
+        }
+      }
+      for (let i = ps.length - 1; i >= 0; i--) {
+        const q = ps[i];
+        q.x += q.vx;
+        q.y += q.vy;
+        q.l -= 0.025;
+        if (q.l <= 0) {
+          ps.splice(i, 1);
+          continue;
+        }
+        x.fillStyle = `rgba(255,${Math.round(120 + q.l * 110)},60,${q.l})`;
+        x.beginPath();
+        x.arc(q.x, q.y, 2 + (1 - q.l) * 10, 0, 6.283);
+        x.fill();
+      }
+      raf = requestAnimationFrame(f);
+    };
+    raf = requestAnimationFrame(f);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <canvas ref={cv} width="300" height="420" style={{ position: 'absolute', left: 0, top: 0, width: 300, height: 420 }} aria-hidden="true" />;
+}
+
+function TeleCanvas({ getv }: { getv: () => number[] }) {
+  const cv = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    const c = cv.current;
+    if (!c) return;
+    const x = c.getContext('2d');
+    if (!x) return;
+    const N = 120;
+    const ch = [0, 1, 2, 3].map(() => Array(N).fill(0.5));
+    let raf: number;
+    let last = 0;
+    const cols = ['#46e0ff', '#5cf2b0', '#ffb23e', '#b79bff'];
+    const names = ['THERMAL', 'BUS VOLTAGE', 'SIGNAL', 'ATTITUDE RATE'];
+
+    const f = (now: number) => {
+      if (now - last > 66 && !RM) {
+        last = now;
+        const v = getv();
+        for (let i = 0; i < 4; i++) {
+          ch[i].push(clamp(v[i] + rnd(-0.04, 0.04), 0, 1));
+          ch[i].shift();
+        }
+      }
+      x.clearRect(0, 0, 760, 420);
+      for (let i = 0; i < 4; i++) {
+        const ox = (i % 2) * 388;
+        const oy = Math.floor(i / 2) * 212;
+        const w = 372;
+        const h = 196;
+        x.strokeStyle = '#1f3856';
+        x.lineWidth = 1;
+        x.strokeRect(ox + 0.5, oy + 0.5, w, h);
+        x.strokeStyle = 'rgba(70,224,255,.08)';
+        for (let g = 1; g < 4; g++) {
+          x.beginPath();
+          x.moveTo(ox, oy + (h * g) / 4);
+          x.lineTo(ox + w, oy + (h * g) / 4);
+          x.stroke();
+        }
+        x.strokeStyle = 'rgba(255,178,62,.5)';
+        x.setLineDash([5, 5]);
+        x.beginPath();
+        x.moveTo(ox, oy + h * 0.2);
+        x.lineTo(ox + w, oy + h * 0.2);
+        x.stroke();
+        x.setLineDash([]);
+        x.fillStyle = '#8da6c2';
+        x.font = '600 10px JetBrains Mono, monospace';
+        x.fillText(names[i], ox + 10, oy + 16);
+        x.strokeStyle = cols[i];
+        x.lineWidth = 2;
+        x.beginPath();
+        ch[i].forEach((y, k) => {
+          const px = ox + (k / (N - 1)) * w;
+          const py = oy + h - 6 - y * (h - 34);
+          k ? x.lineTo(px, py) : x.moveTo(px, py);
+        });
+        x.stroke();
+        const ly = oy + h - 6 - ch[i][N - 1] * (h - 34);
+        x.fillStyle = cols[i];
+        x.beginPath();
+        x.arc(ox + w, ly, 4, 0, 6.283);
+        x.fill();
+      }
+      raf = requestAnimationFrame(f);
+    };
+    raf = requestAnimationFrame(f);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <canvas ref={cv} width="760" height="420" style={{ width: 760, height: 420 }} role="img" aria-label="Live telemetry graphs" />;
+}
+
+function useTimers() {
+  const t = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => t.current.forEach(clearTimeout), []);
+  return useCallback((fn: () => void, ms: number) => {
+    const id = setTimeout(fn, ms);
+    t.current.push(id);
+    return id;
+  }, []);
+}
+
+// ============================================================================
+// PAGES 01–20
+// ============================================================================
+
+/* 01 LANDING */
+function P1() {
+  const { go } = useG();
+  const best = bestGet();
+  return (
+    <section className="page full" aria-label="Landing">
+      <div className="p1-ship" style={{ pointerEvents: 'none' }}>
+        <Craft d={DEF_DESIGN} scale={1.45} />
+      </div>
+      <div className="p1-copy">
+        <div className="tag rise" style={ri(0)}>SIMULATED DEEP-SPACE PROGRAM · TARGET ASTERIA-1</div>
+        <h1 className="title rise" style={ri(1)}>
+          Mission<span>Last Light</span>
+        </h1>
+        <p className="tagline rise" style={ri(2)}>DESIGN. STRESS-TEST. ADAPT. SURVIVE.</p>
+        <div className="row gap rise" style={ri(3)}>
+          <Btn glow icon="rocket" onClick={() => go(3)}>Start mission</Btn>
+          <Btn k="secondary" icon="play" onClick={() => go(2)}>How to play</Btn>
+        </div>
+        <div className="mono dim rise" style={{ ...ri(4), fontSize: 12, letterSpacing: '.12em' }}>
+          {best ? `BEST SCORE ${fmt(best)}` : 'NO MISSIONS FLOWN YET'}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* 02 HOW TO PLAY */
+const TUT = [
+  { t: 'DESIGN', ic: 'rocket', b: 'Choose propulsion, structure, power, shielding, comms and instruments. Every kilogram and every dollar is a trade-off between range, safety and science.' },
+  { t: 'STRESS-TEST', ic: 'therm', b: 'Your craft is shaken, heated and loaded before launch. Weak points show up on the test stand, or later in flight where they cost far more.' },
+  { t: 'ADAPT', ic: 'bolt', b: 'Events and crises arrive mid-mission. Your power split, fuel reserve and shielding decide which options are good ones.' },
+  { t: 'SURVIVE', ic: 'shield', b: 'Reach ASTERIA-1, collect science, send it home and keep the spacecraft alive. The debrief traces every consequence back to a choice.' }
+];
+
+function P2() {
+  const { go } = useG();
+  const [i, setI] = useState(0);
+  const [st, setSt] = useState('');
+  const [started, setStarted] = useState(false);
+  const x0 = useRef<number | null>(null);
+  const t = useTimers();
+
+  const next = () => {
+    if (!started) {
+      setSt('loading');
+      t(() => {
+        setSt('success');
+        t(() => {
+          setSt('');
+          setStarted(true);
+        }, 400);
+      }, 500);
+      return;
+    }
+    if (i < TUT.length - 1) setI(i + 1);
+    else go(3);
+  };
+
+  const key = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowRight') setI(v => Math.min(TUT.length - 1, v + 1));
+    if (e.key === 'ArrowLeft') setI(v => Math.max(0, v - 1));
   };
 
   return (
-    <div className="flex h-full flex-col justify-between p-4 pb-8 overflow-y-auto no-scrollbar">
-      <div>
-        <div className="relative mb-3 h-36 overflow-hidden rounded-xl bg-[#0D111A] flex items-center justify-center border border-[#293342]">
-          <SpacecraftSvg s={0.75} />
-          {testState.active && (
-            <div
-              className="absolute inset-0 bl pointer-events-none"
-              style={{
-                background: 'linear-gradient(90deg, transparent, #FF174488, transparent)',
-              }}
-            />
-          )}
-        </div>
-
-        <ProgressBar
-          label="POWER SURVIVAL"
-          value={testState.damage ? 100 - testState.damage : 100}
-          color="#FFAB00"
-        />
-        <ProgressBar
-          label="HULL INTEGRITY"
-          value={testState.damage ? 100 - testState.damage * 1.4 : 100}
-          color="#00E676"
-        />
-
-        <div className="my-3 grid grid-cols-2 gap-2">
-          {STRESS_HAZARDS.map((h, i) => (
-            <button
-              key={h.name}
-              type="button"
-              className="card min-h-[48px] text-[11px] font-semibold cursor-pointer text-left transition-colors"
-              style={{
-                borderColor: i === selectedHazard ? '#00E5FF' : '#293342',
-                color: i === selectedHazard ? '#00E5FF' : '#F3F6FA',
-              }}
-              onClick={() => {
-                playTelemetryClick();
-                setSelectedHazard(i);
-                setTestState({});
-              }}
-            >
-              {h.label}
-            </button>
-          ))}
-        </div>
+    <section className="page full" aria-label="How to play">
+      <div className="p1-ship" style={{ opacity: 0.35, pointerEvents: 'none' }}>
+        <Craft d={DEF_DESIGN} scale={1.45} />
       </div>
-
-      {testState.outcome && (
-        <div className="card my-2 border-[#00E5FF]">
-          <div className="mono text-xs text-[#00E5FF] font-bold">
-            TEST OUTCOME: {testState.outcome}
+      <div className="sheet" onKeyDown={key}>
+        <div className="row between">
+          <div>
+            <div className="pidx">02 / 20</div>
+            <h1 className="h2" style={{ fontSize: 26 }}>HOW TO PLAY</h1>
           </div>
-          <div className="text-xs text-[#AAB4C3] mt-1">
-            Estimated damage: {testState.damage}%. Hardened systems reduce degradation.
-          </div>
+          <Btn k="secondary" cls="icon" icon="x" title="Close" onClick={() => go(1)} />
         </div>
-      )}
-
-      <div className="space-y-2 mt-2">
-        <button
-          type="button"
-          className="btn p cursor-pointer"
-          onClick={runTest}
-          disabled={testState.active}
-        >
-          {testState.active ? 'SIMULATING HAZARD...' : 'RUN STRESS TEST'}
-        </button>
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="btn flex-1 text-xs cursor-pointer"
-            onClick={onRedesign}
-          >
-            REDESIGN
-          </button>
-          <button
-            type="button"
-            className="btn flex-1 text-xs cursor-pointer"
-            onClick={onLaunch}
-          >
-            PROCEED TO LAUNCH
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
-// 8. SCREEN: LAUNCH COUNTDOWN
-// ============================================================================
-const ScreenLaunchCountdown: React.FC<{
-  totals: CraftTotals;
-  onIgnitionComplete: () => void;
-}> = ({ totals, onIgnitionComplete }) => {
-  const [countdown, setCountdown] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (countdown === null) return;
-
-    if (countdown < 0) {
-      playSuccessChime();
-      const t = setTimeout(onIgnitionComplete, 1200);
-      return () => clearTimeout(t);
-    }
-
-    if (countdown === 0) {
-      playThrusterPulse();
-    } else {
-      playTelemetryClick();
-    }
-
-    const t = setTimeout(() => setCountdown(countdown - 1), countdown === 0 ? 1600 : 800);
-    return () => clearTimeout(t);
-  }, [countdown, onIgnitionComplete]);
-
-  if (countdown !== null) {
-    return (
-      <div className="flex h-full items-center justify-center bg-black relative overflow-hidden select-none">
-        {countdown > 0 ? (
-          <div key={countdown} className="pg mono text-[130px] font-bold text-[#00E5FF]">
-            {countdown}
-          </div>
-        ) : countdown === 0 ? (
-          <div className="flex flex-col items-center">
-            <div className="mono text-center text-4xl text-[#FFAB00] font-extrabold tracking-wider animate-bounce">
-              IGNITION
-            </div>
-            {Array.from({ length: 16 }, (_, i) => (
-              <span
-                key={i}
-                className="absolute h-10 w-1 rounded bg-[#FFAB00]"
-                style={{
-                  left: 140 + i * 8,
-                  top: 0,
-                  animation: `rk ${0.9 + (i % 4) * 0.15}s linear infinite`,
-                  animationDelay: `${i * 0.04}s`,
-                }}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="mono text-2xl font-bold text-[#00E676] animate-pulse">
-            ORBIT INSERTION CONFIRMED
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full flex-col justify-between p-5 pt-12 pb-8">
-      <div className="text-center">
-        <div className="text-2xl font-bold text-white mb-2">LAUNCH AUTHORIZATION</div>
-        <p className="text-xs text-[#AAB4C3]">
-          All range tracking stations ready. Confirm flight parameters before liftoff.
-        </p>
-      </div>
-
-      <div className="space-y-3 my-auto">
-        <div className="card flex justify-between items-center text-xs">
-          <span>Readiness Score</span>
-          <b className="mono text-[#00E5FF] text-sm">{totals.reliabilityPct}%</b>
-        </div>
-        <div className="card flex justify-between items-center text-xs">
-          <span>Available Interplanetary Δv</span>
-          <b className="mono text-[#00E676] text-sm">+{totals.dvMs} m/s</b>
-        </div>
-        <div className="card flex justify-between items-center text-xs">
-          <span>Total Vehicle Mass</span>
-          <b className="mono text-white text-sm">{totals.massKg} kg</b>
-        </div>
-        <div className="card flex justify-between items-center text-xs">
-          <span>Target Destination</span>
-          <b className="mono text-[#FFAB00] text-sm">ASTERIA-1 (146 Days)</b>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        className="btn p cursor-pointer"
-        onClick={() => setCountdown(10)}
-      >
-        CONFIRM & INITIATE COUNTDOWN
-      </button>
-    </div>
-  );
-};
-
-// ============================================================================
-// 9. SCREEN: FLIGHT SIMULATION (THE CORE GAME!)
-// ============================================================================
-const ScreenFlightSim: React.FC<{
-  g: GameState;
-  totals: CraftTotals;
-  updateG: (updater: Partial<GameState> | ((prev: GameState) => GameState)) => void;
-  onExecuteManeuver: (type: 'tcm1' | 'tcm2' | 'rdvz') => void;
-  onExecuteScan: (inst: string, costW: number, sci: number, gb: number) => void;
-  onDownlink: () => void;
-  onOpenRock: () => void;
-}> = ({ g, totals, updateG, onExecuteManeuver, onExecuteScan, onDownlink, onOpenRock }) => {
-  const [pan, setPan] = useState<[number, number]>([0, 0]);
-  const [zoom, setZoom] = useState(1);
-  const [dragStart, setDragStart] = useState<[number, number] | null>(null);
-
-  const transitPct = g.day / 146;
-  const sunDistAu = +(1.0 + transitPct * 0.25).toFixed(2);
-  const earthDistAu = +(transitPct * 0.85 + 0.05).toFixed(2);
-  const lightLatencyMin = +(earthDistAu * 8.3).toFixed(1);
-
-  // Bezier curve calculations for orbit map
-  const bz = (a: number, b: number, c: number, t: number) =>
-    (1 - t) * (1 - t) * a + 2 * (1 - t) * t * b + t * t * c;
-
-  const cpX = g.maneuversDone.tcm1 ? 240 : 200;
-  const cpY = g.maneuversDone.tcm2 ? 140 : 380;
-  const craftX = bz(80, cpX * 0.8, 310, transitPct);
-  const craftY = bz(300, cpY, 200, transitPct);
-
-  const phaseName =
-    g.day < 5
-      ? 'LAUNCH / TLI'
-      : g.day < 60
-      ? 'CRUISE (TCM-1)'
-      : g.day < 110
-      ? 'APPROACH (TCM-2)'
-      : g.day < 130
-      ? 'RENDEZVOUS'
-      : 'SCIENCE SURVEY';
-
-  return (
-    <div className="relative h-full overflow-hidden select-none flex flex-col">
-      {/* Top Status & Speed Controls */}
-      <div className="flex-none p-3 pt-1 flex items-center justify-between text-xs z-20 bg-gradient-to-b from-[#080B12] to-transparent">
-        <div className="flex items-center gap-1.5">
-          <span className="pill mono text-[10px] text-[#00E5FF] font-bold">
-            {phaseName}
-          </span>
-          <span className="pill mono text-[10px]">Day {g.day}/146</span>
-        </div>
-
-        {/* Speed Multipliers */}
-        <div className="flex items-center gap-1">
-          {[
-            { s: 0, l: '⏸' },
-            { s: 1, l: '1X' },
-            { s: 5, l: '5X' },
-            { s: 20, l: '20X' },
-            { s: 100, l: '100X' },
-          ].map(({ s, l }) => (
-            <button
-              key={s}
-              type="button"
-              className="pill px-2 py-0.5 text-[9.5px] mono cursor-pointer"
-              style={{
-                color: g.timeSpeed === s ? '#00E5FF' : '#AAB4C3',
-                borderColor: g.timeSpeed === s ? '#00E5FF' : '#293342',
-                background: g.timeSpeed === s ? '#00E5FF22' : '#0D111Acc',
-              }}
-              onClick={() => {
-                playTelemetryClick();
-                updateG({ timeSpeed: s });
-              }}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Interactive Orbit Trajectory Canvas */}
-      <div className="flex-1 relative overflow-hidden">
-        <svg
-          viewBox="0 0 393 540"
-          className="absolute inset-0 w-full h-full touch-none"
-          onPointerDown={(e) => setDragStart([e.clientX, e.clientY])}
-          onPointerMove={(e) => {
-            if (dragStart) {
-              setPan([pan[0] + e.clientX - dragStart[0], pan[1] + e.clientY - dragStart[1]]);
-              setDragStart([e.clientX, e.clientY]);
-            }
+        <div
+          style={{ overflow: 'hidden', flex: 1 }}
+          onPointerDown={e => { x0.current = e.clientX; }}
+          onPointerUp={e => {
+            if (x0.current == null) return;
+            const dx = e.clientX - x0.current;
+            x0.current = null;
+            if (dx < -40) setI(v => Math.min(TUT.length - 1, v + 1));
+            if (dx > 40) setI(v => Math.max(0, v - 1));
           }}
-          onPointerUp={() => setDragStart(null)}
-          onPointerLeave={() => setDragStart(null)}
         >
-          <g transform={`translate(${pan[0]} ${pan[1]}) scale(${zoom})`}>
-            {/* Background stars */}
-            {Array.from({ length: 30 }, (_, i) => (
-              <circle
-                key={i}
-                cx={(i * 97) % 393}
-                cy={(i * 61) % 540}
-                r={i % 3 ? 0.9 : 1.4}
-                fill="#fff"
-                opacity="0.45"
-              />
-            ))}
-
-            {/* Orbit Trajectory Arc */}
-            <path
-              d={`M80 300 Q ${cpX * 0.8} ${cpY} 310 200`}
-              fill="none"
-              stroke="#00E676"
-              strokeWidth="2"
-              strokeDasharray="6 4"
-              opacity="0.75"
-            />
-
-            {/* Earth Body */}
-            <circle cx="80" cy="300" r="32" fill="#12467a" stroke="#00E5FF" strokeWidth="1.5" />
-            <text x="80" y="346" fill="#AAB4C3" fontSize="10" textAnchor="middle" className="mono">
-              EARTH
-            </text>
-
-            {/* Target Asteroid ASTERIA-1 */}
-            <g
-              className="cursor-pointer"
-              onClick={() => {
-                playTelemetryClick();
-                onOpenRock();
-              }}
-            >
-              <circle cx="310" cy="200" r="16" fill="#3a3f4b" stroke="#AAB4C3" strokeWidth="1.5" />
-              <circle cx="310" cy="200" r="22" fill="none" stroke="#00E5FF" strokeWidth="1" strokeDasharray="3 3">
-                <animate attributeName="r" values="20;26;20" dur="3s" repeatCount="indefinite" />
-              </circle>
-              <text x="310" y="234" fill="#AAB4C3" fontSize="10" textAnchor="middle" className="mono">
-                ASTERIA-1
-              </text>
-            </g>
-
-            {/* Spacecraft Marker */}
-            <g transform={`translate(${craftX} ${craftY})`}>
-              <circle r="8" fill="#00E5FF">
-                <animate attributeName="r" values="6;10;6" dur="2s" repeatCount="indefinite" />
-              </circle>
-              <rect x="-4" y="-4" width="8" height="8" fill="#F3F6FA" rx="1" />
-            </g>
-          </g>
-        </svg>
-
-        {/* Zoom Buttons */}
-        <div className="absolute right-3 top-3 z-10 flex flex-col gap-1.5">
-          <button
-            type="button"
-            className="pill min-h-[36px] min-w-[36px] text-sm font-bold text-white cursor-pointer"
-            onClick={() => setZoom((z) => Math.min(2.5, z + 0.25))}
-          >
-            ＋
-          </button>
-          <button
-            type="button"
-            className="pill min-h-[36px] min-w-[36px] text-sm font-bold text-white cursor-pointer"
-            onClick={() => setZoom((z) => Math.max(0.6, z - 0.25))}
-          >
-            －
-          </button>
-        </div>
-
-        {/* Left Telemetry HUD */}
-        <div className="absolute left-3 top-3 z-10 flex flex-col gap-1 text-[10px] mono">
-          <div className="pill py-1 px-2.5">
-            <span className="text-[#AAB4C3] mr-1">Health:</span>
-            <b className={g.healthPct > 50 ? 'text-[#00E676]' : 'up'}>
-              {Math.round(g.healthPct)}%
-            </b>
-          </div>
-          <div className="pill py-1 px-2.5">
-            <span className="text-[#AAB4C3] mr-1">Fuel:</span>
-            <b className="text-[#00E5FF]">{Math.round(g.fuelKg)} kg</b>
-          </div>
-          <div className="pill py-1 px-2.5">
-            <span className="text-[#AAB4C3] mr-1">Battery:</span>
-            <b className={g.batteryPct > 20 ? 'text-[#00E5FF]' : 'up'}>
-              {Math.round(g.batteryPct)}%
-            </b>
-          </div>
-          <div className="pill py-1 px-2.5">
-            <span className="text-[#AAB4C3] mr-1">Buffer:</span>
-            <b className="text-[#00E5FF]">{g.dataBufferGb.toFixed(1)} GB</b>
-          </div>
-          <div className="pill py-1 px-2.5">
-            <span className="text-[#AAB4C3] mr-1">Miss Dist:</span>
-            <b className={g.missDistanceKm < 500 ? 'text-[#00E676]' : 'text-[#FFAB00]'}>
-              {g.missDistanceKm.toLocaleString()} km
-            </b>
-          </div>
-          <div className="pill py-1 px-2.5">
-            <span className="text-[#AAB4C3] mr-1">Temp:</span>
-            <b className="text-[#00E5FF]">{g.busTempC}°C</b>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom 6-icon Dock Bar */}
-      <div className="flex-none grid grid-cols-6 gap-1 border-t border-[#293342] bg-[#0D111Aee] backdrop-blur-md p-2 pb-4 z-20">
-        {[
-          { id: 'maneuver', icon: '⌖', label: 'MANEUVER' },
-          { id: 'observe', icon: '◉', label: 'SURFACE' },
-          { id: 'power', icon: '⚡', label: 'POWER' },
-          { id: 'comms', icon: '📡', label: 'COMMS' },
-          { id: 'science', icon: '⚗', label: 'SCIENCE' },
-          { id: 'safe', icon: '⛨', label: 'SAFE' },
-        ].map(({ id, icon, label }) => (
-          <button
-            key={id}
-            type="button"
-            className="min-h-[50px] rounded-lg text-center cursor-pointer active:scale-95 transition-transform"
-            style={{
-              color:
-                id === 'safe' && g.safeMode
-                  ? '#FFAB00'
-                  : g.activeDockTab === id
-                  ? '#00E5FF'
-                  : '#F3F6FA',
-            }}
-            onClick={() => {
-              playTelemetryClick();
-              if (id === 'safe') {
-                updateG({ safeMode: !g.safeMode });
-              } else if (id === 'observe') {
-                onOpenRock();
-              } else {
-                updateG({ activeDockTab: g.activeDockTab === id ? null : (id as FlightDockTab) });
-              }
-            }}
-          >
-            <div className="text-lg leading-tight">{icon}</div>
-            <div className="text-[7.5px] tracking-tight font-semibold mt-0.5">{label}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* MANEUVER BOTTOM SHEET */}
-      {g.activeDockTab === 'maneuver' && (
-        <Sheet onClose={() => updateG({ activeDockTab: null })}>
-          <div className="text-sm font-bold text-white mb-2">TRAJECTORY CORRECTION BURNS</div>
-          <p className="text-xs text-[#AAB4C3] mb-3">
-            Execute burns to reduce asteroid miss distance. Insufficient delta-V will cause a flyby.
-          </p>
-
-          <div className="space-y-2 mb-4 text-xs">
-            <div className="card">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-bold text-white">TCM-1: Midcourse Correction</span>
-                <b className={g.maneuversDone.tcm1 ? 'dn' : 'text-[#AAB4C3]'}>
-                  {g.maneuversDone.tcm1 ? '✓ EXECUTED' : 'READY'}
-                </b>
-              </div>
-              <div className="mono text-[11px] text-[#AAB4C3] mb-2">
-                Burn: 75 kg Propellant · Reduces miss by 24,000 km
-              </div>
-              {!g.maneuversDone.tcm1 && (
-                <button
-                  type="button"
-                  className="btn p min-h-[36px] text-xs cursor-pointer"
-                  onClick={() => onExecuteManeuver('tcm1')}
-                >
-                  EXECUTE TCM-1 BURN
-                </button>
-              )}
-            </div>
-
-            <div className="card">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-bold text-white">TCM-2: Approach Guidance</span>
-                <b className={g.maneuversDone.tcm2 ? 'dn' : 'text-[#AAB4C3]'}>
-                  {g.maneuversDone.tcm2 ? '✓ EXECUTED' : 'READY'}
-                </b>
-              </div>
-              <div className="mono text-[11px] text-[#AAB4C3] mb-2">
-                Burn: 95 kg Propellant · Reduces miss by 12,000 km
-              </div>
-              {!g.maneuversDone.tcm2 && (
-                <button
-                  type="button"
-                  className="btn p min-h-[36px] text-xs cursor-pointer"
-                  onClick={() => onExecuteManeuver('tcm2')}
-                >
-                  EXECUTE TCM-2 BURN
-                </button>
-              )}
-            </div>
-
-            <div className="card">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-bold text-white">Rendezvous Insertion Burn</span>
-                <b className={g.maneuversDone.rdvz ? 'dn' : 'text-[#AAB4C3]'}>
-                  {g.maneuversDone.rdvz ? '✓ EXECUTED' : 'READY'}
-                </b>
-              </div>
-              <div className="mono text-[11px] text-[#AAB4C3] mb-2">
-                Burn: 140 kg Propellant · Enters proximity orbit (&lt; 100 km)
-              </div>
-              {!g.maneuversDone.rdvz && (
-                <button
-                  type="button"
-                  className="btn p min-h-[36px] text-xs cursor-pointer"
-                  onClick={() => onExecuteManeuver('rdvz')}
-                >
-                  EXECUTE INSERTION BURN
-                </button>
-              )}
-            </div>
-          </div>
-        </Sheet>
-      )}
-
-      {/* POWER MANAGEMENT SHEET */}
-      {g.activeDockTab === 'power' && (
-        <Sheet onClose={() => updateG({ activeDockTab: null })}>
-          <div className="text-sm font-bold text-white mb-1">ELECTRICAL POWER GRID</div>
-          <div className="mono text-xs text-[#00E5FF] mb-3">
-            Solar Irradiance: {sunDistAu} AU ({Math.round(100 / (sunDistAu * sunDistAu))}% generation)
-          </div>
-
-          {(['science', 'comms', 'computing', 'thermal'] as const).map((k) => (
-            <div key={k} className="mb-2">
-              <div className="mono flex justify-between text-xs text-[#AAB4C3] mb-0.5">
-                <span>{k.toUpperCase()}</span>
-                <b className="text-[#00E5FF]">{g.powerAlloc[k]}%</b>
-              </div>
-              <input
-                type="range"
-                min="5"
-                max="80"
-                value={g.powerAlloc[k]}
-                onChange={(e) =>
-                  updateG({
-                    powerAlloc: { ...g.powerAlloc, [k]: parseInt(e.target.value, 10) },
-                  })
-                }
-              />
-            </div>
-          ))}
-
-          <button
-            type="button"
-            className="btn p mt-2 min-h-[40px] text-xs cursor-pointer"
-            onClick={() => {
-              playSuccessChime();
-              updateG({ activeDockTab: null, toastMessage: 'Power grid rebalanced.' });
-            }}
-          >
-            APPLY CONFIGURATION
-          </button>
-        </Sheet>
-      )}
-
-      {/* COMMS DOWNLINK SHEET */}
-      {g.activeDockTab === 'comms' && (
-        <Sheet onClose={() => updateG({ activeDockTab: null })}>
-          <div className="text-sm font-bold text-white mb-1">DEEP SPACE NETWORK LINK</div>
-          <div className="mono text-xs text-[#AAB4C3] mb-2">
-            Distance: {earthDistAu} AU · 1-Way Latency: {lightLatencyMin} min
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-xs mono mb-3">
-            <div className="card p-2">
-              Signal:{' '}
-              <b className={g.day % 30 < 22 ? 'text-[#00E676]' : 'up'}>
-                {g.day % 30 < 22 ? 'LOCKED (GOLDSTONE)' : 'NO VISIBILITY'}
-              </b>
-            </div>
-            <div className="card p-2">
-              Data Rate: <b className="text-[#00E5FF]">2.4 Mbps</b>
-            </div>
-            <div className="card p-2">
-              Downlinked: <b className="text-[#00E5FF]">{g.dataReturnedGb} GB</b>
-            </div>
-            <div className="card p-2">
-              Contacts:{' '}
-              <b className="text-[#00E5FF]">{g.downlinksDone} passes</b>
-            </div>
-          </div>
-
-          <ProgressBar
-            label={`Recorder Buffer (${g.dataBufferGb} / ${g.dataBufferMaxGb} GB)`}
-            value={(g.dataBufferGb / g.dataBufferMaxGb) * 100}
-          />
-
-          <button
-            type="button"
-            className="btn p mt-2 min-h-[40px] text-xs cursor-pointer"
-            onClick={onDownlink}
-          >
-            DOWNLINK TO EARTH NOW
-          </button>
-        </Sheet>
-      )}
-
-      {/* SCIENCE OPERATIONS SHEET */}
-      {g.activeDockTab === 'science' && (
-        <Sheet onClose={() => updateG({ activeDockTab: null })}>
-          <div className="text-sm font-bold text-white mb-1">INSTRUMENT SCIENTIFIC OBSERVATIONS</div>
-          <div className="mono text-xs text-[#00E5FF] mb-3">
-            Cumulative Science Yield: {g.sciencePoints} pts
-          </div>
-
-          <div className="space-y-2 mb-3">
-            {[
-              { id: 'Camera', label: 'PolyCam Framing Imager', cost: 12, sci: 8, gb: 1.8 },
-              { id: 'IR Spec', label: 'OVIRS Infrared Spectrometer', cost: 18, sci: 12, gb: 2.4 },
-              { id: 'Radar', label: 'Subsurface Sounder', cost: 26, sci: 16, gb: 3.5 },
-              { id: 'LIDAR', label: '3D Laser Altimeter', cost: 22, sci: 14, gb: 2.8 },
-            ].map(({ id, label, cost, sci, gb }) => (
-              <div key={id} className="card flex justify-between items-center p-2 text-xs">
-                <div>
-                  <b className="text-white block">{label}</b>
-                  <span className="mono text-[10px] text-[#6F7B8C]">
-                    +{sci} Pts · +{gb} GB Data
-                  </span>
+          <div className="track" style={{ transform: `translateX(${252 - i * 440}px)` }}>
+            {TUT.map((c, n) => (
+              <div key={c.t} className={'tcard ' + (n === i ? 'act' : '')} aria-hidden={n !== i}>
+                <div className="row gap">
+                  <span className="cy"><Ic n={c.ic} s={34} /></span>
+                  <h2 className="h2" style={{ fontSize: 24 }}>{c.t}</h2>
                 </div>
-                <button
-                  type="button"
-                  className="btn p min-h-[34px] w-28 text-xs cursor-pointer"
-                  onClick={() => onExecuteScan(id, cost, sci, gb)}
-                >
-                  EXECUTE
-                </button>
+                <p style={{ marginTop: 14, color: 'var(--mute)', fontSize: 15, lineHeight: 1.5 }}>{c.b}</p>
               </div>
             ))}
           </div>
-
-          <button
-            type="button"
-            className="btn min-h-[40px] text-xs cursor-pointer"
-            onClick={onOpenRock}
-          >
-            SURFACE PROXIMITY SURVEY (3D)
-          </button>
-        </Sheet>
-      )}
-    </div>
+        </div>
+        <div className="dots" role="tablist" aria-label="Tutorial steps">
+          {TUT.map((_, n) => (
+            <i key={n} className={n === i ? 'on' : ''} />
+          ))}
+        </div>
+        <div className="row between">
+          <Btn k="secondary" onClick={() => go(3)} icon="skip">Skip</Btn>
+          <div className="row gap8">
+            <Btn k="secondary" cls="icon" icon="back" title="Previous card" disabled={i === 0} onClick={() => setI(i - 1)} />
+            <Btn state={st} onClick={next} icon={started ? (i === TUT.length - 1 ? 'rocket' : 'chev') : 'play'}>
+              {st === 'success' ? 'Ready' : !started ? 'Start tutorial' : i === TUT.length - 1 ? 'Enter briefing' : 'Next'}
+            </Btn>
+          </div>
+        </div>
+      </div>
+    </section>
   );
+}
+
+/* 03 BRIEFING */
+const OBJ = [
+  ['Design a spacecraft', 'Stay inside $42M and 3,000 kg.'],
+  ['Survive launch and cruise', 'Pass stress tests and handle anomalies.'],
+  ['Rendezvous with ASTERIA-1', 'Match velocity and dock.'],
+  ['Collect science', 'Scan the asteroid with your instruments.'],
+  ['Send the data home', 'Compress, stage and transmit.']
+];
+
+const CONS = [
+  ['Budget', 'The program funds $42.0M for hardware. Anything unspent counts toward your economy score.'],
+  ['Launch mass', 'The launch vehicle lifts 3,000 kg at most. Propellant counts as mass.'],
+  ['Delta-V', 'About 1,450 m/s covers corrections, braking and docking. Less is possible, but tight.'],
+  ['Communications', 'Data only counts once it reaches Earth. Signal quality depends on antenna and comms power.']
+];
+
+function P3() {
+  const { go } = useG();
+  const [chk, setChk] = useState([false, false, false, false, false]);
+  const [open, setOpen] = useState(0);
+  const first = chk.indexOf(false);
+
+  const toggleCheck = (n: number) => {
+    playSuccessChime();
+    setChk(c => c.map((x, j) => (j === n ? !x : x)));
+  };
+
+  return (
+    <section className="page" aria-label="Mission briefing">
+      <PHead
+        n={3}
+        title="MISSION BRIEFING"
+        sub="Reach the asteroid ASTERIA-1 and bring its data home before the light fades."
+        right={<div className="pill cy">SIMULATED / GAME DATA</div>}
+      />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
+        <div className="panel rise col" style={{ ...ri(1), width: 430, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ position: 'relative', width: 260, height: 260, marginTop: 6 }}>
+            <Asteria size={260} scan={true} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', width: '100%' }}>
+            {[
+              ['DIAMETER', 412, 'm', 0],
+              ['SPIN PERIOD', 7.2, 'h', 1],
+              ['DISTANCE', 1.42, 'AU', 2],
+              ['SURFACE', 6, '% albedo', 0]
+            ].map(([l, v, u, dd]) => (
+              <div key={l as string}>
+                <div className="lab">{l as string}</div>
+                <div className="mono" style={{ fontSize: 22, fontWeight: 600 }}>
+                  <Num v={v as number} d={dd as number} start={0} dur={1400} /> <small className="dim">{u as string}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="col gap grow">
+          <div className="col gap8">
+            <div className="lab rise" style={ri(2)}>Objectives · tap to acknowledge</div>
+            {OBJ.map(([t, s], n) => {
+              const st = chk[n] ? 'completed' : n === first ? 'active' : 'incomplete';
+              return (
+                <button
+                  type="button"
+                  key={t}
+                  className={'obj rise ' + st}
+                  style={ri(3 + n)}
+                  aria-pressed={chk[n]}
+                  onClick={() => toggleCheck(n)}
+                >
+                  <span className={'chk ' + (chk[n] ? 'on' : '')}>
+                    <Ic n="check" s={18} sw={3} />
+                  </span>
+                  <span className="grow">
+                    <div className="t">{t}</div>
+                    <div className="s">{s}</div>
+                  </span>
+                  <span
+                    className="state"
+                    style={{
+                      color: st === 'completed' ? 'var(--green)' : st === 'active' ? 'var(--cyan)' : 'var(--faint)'
+                    }}
+                  >
+                    {st.toUpperCase()}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="col gap8 rise" style={ri(9)}>
+            <div className="lab">Constraints</div>
+            {CONS.map(([h, b], n) => (
+              <div key={h} className={'acc ' + (open === n ? 'open' : '')}>
+                <button type="button" className="hd" aria-expanded={open === n} onClick={() => setOpen(open === n ? -1 : n)}>
+                  {h.toUpperCase()}
+                  <span className="chev"><Ic n="chev" s={18} /></span>
+                </button>
+                <div className="bd">
+                  <div>
+                    <p>{b}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="row between rise" style={ri(10)}>
+        <Btn k="secondary" icon="back" onClick={() => go(1)}>Back</Btn>
+        <Btn glow icon="chev" onClick={() => go(4)}>Accept mission</Btn>
+      </div>
+    </section>
+  );
+}
+
+/* 04 SETUP */
+const MODES: Record<string, string> = {
+  CADET: 'Forgiving. Damage ×0.75.',
+  COMMANDER: 'Standard. Damage ×1.0.',
+  VETERAN: 'Unforgiving. Damage ×1.3.'
 };
 
-// ============================================================================
-// 10. SCREEN: ASTEROID SURFACE SURVEY (3D / 2.5D ROTATION)
-// ============================================================================
-const ScreenAsteroidSurvey: React.FC<{
-  g: GameState;
-  updateG: (updater: Partial<GameState> | ((prev: GameState) => GameState)) => void;
-  onBack: () => void;
-}> = ({ g, updateG, onBack }) => {
-  const [rot, setRot] = useState(0);
-  const [dragX, setDragX] = useState<number | null>(null);
-  const [inspectedPin, setInspectedPin] = useState<string | null>(null);
+function P4() {
+  const { S, up, go } = useG();
+  const [sel, setSel] = useState('science');
 
-  const targets = [
-    { id: 'Alpha', name: 'Nightingale Crater', desc: 'Fine-grained black organic regolith. High scientific value.', sci: 20, gb: 2.5 },
-    { id: 'Beta', name: 'Osprey Basin', desc: 'B-type carbonaceous asteroid boulder field with hydrated minerals.', sci: 16, gb: 2.0 },
-    { id: 'Gamma', name: 'Equatorial Ridge', desc: 'Rotational diamond bulge. Rich in ancient volatile ice deposits.', sci: 24, gb: 3.2 },
+  const setPri = (k: 'science' | 'safety' | 'economy', v: number) => {
+    setSel(k);
+    up(s => {
+      const p = { ...s.priorities };
+      const o = (Object.keys(p) as ('science' | 'safety' | 'economy')[]).filter(x => x !== k);
+      const rest = 100 - v;
+      const tot = o.reduce((t, x) => t + p[x], 0) || 1;
+      let acc = 0;
+      o.forEach((x, i) => {
+        const nv = i === o.length - 1 ? rest - acc : Math.round((p[x] / tot) * rest);
+        p[x] = nv;
+        acc += nv;
+      });
+      p[k] = v;
+      return { priorities: p };
+    });
+  };
+
+  const P = S.priorities;
+  const w = (k: 'science' | 'safety' | 'economy') => P[k] / 33.3;
+  const defs: ['science' | 'safety' | 'economy', string, string, string][] = [
+    ['science', 'SCIENCE', 'Returns score for data that reaches Earth.', 'scan'],
+    ['safety', 'SAFETY', 'Cuts damage taken and rewards health at the end.', 'shield'],
+    ['economy', 'ECONOMY', 'Rewards unspent budget and leftover fuel.', 'bolt']
   ];
 
   return (
-    <div className="flex h-full flex-col justify-between p-4 pt-4 pb-8 select-none">
-      <div className="text-center">
-        <div className="mono text-xs text-[#00E5FF] font-bold">
-          ASTERIA-1 · PROXIMITY RECONNAISSANCE
-        </div>
-        <div className="text-[11px] text-[#AAB4C3]">
-          Drag to rotate asteroid sphere · Tap markers to survey
-        </div>
-      </div>
-
-      <div
-        className="touch-none cursor-grab flex items-center justify-center my-auto"
-        onPointerDown={(e) => setDragX(e.clientX)}
-        onPointerMove={(e) => {
-          if (dragX !== null) {
-            setRot((r) => r + (e.clientX - dragX) / 50);
-            setDragX(e.clientX);
-          }
-        }}
-        onPointerUp={() => setDragX(null)}
-        onPointerLeave={() => setDragX(null)}
-        style={{ position: 'relative', width: 280, height: 280 }}
-      >
-        <AsteroidSvg rot={rot} size={135} />
-
-        {targets.map((t, i) => {
-          const a = i * 2.1 + rot;
-          if (Math.cos(a) <= 0) return null;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              className="pill absolute min-h-[38px] min-w-[38px] text-xs font-bold border-[#00E5FF] text-[#00E5FF] cursor-pointer shadow-lg active:scale-95"
+    <section className="page" aria-label="Mission setup">
+      <PHead n={4} title="MISSION SETUP" sub="Set what the program values most. Priorities always add up to 100." />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
+        <div className="col gap grow">
+          {defs.map(([k, n, desc, ic], i) => (
+            <div
+              key={k}
+              className={'panel rise ' + (sel === k ? '' : '')}
               style={{
-                left: 140 + Math.sin(a) * 90 - 19,
-                top: 120 + (i - 1) * 36 - 19,
-                background: '#0D111Aee',
-              }}
-              onClick={() => {
-                playTelemetryClick();
-                setInspectedPin(t.id);
+                ...ri(1 + i),
+                boxShadow: sel === k ? '0 0 30px rgba(70,224,255,.22)' : 'none',
+                borderColor: sel === k ? 'var(--cyan)' : undefined,
+                transition: 'box-shadow var(--ui), border-color var(--ui)'
               }}
             >
-              {t.id[0]}
-            </button>
-          );
-        })}
-      </div>
-
-      <button
-        type="button"
-        className="btn cursor-pointer"
-        onClick={onBack}
-      >
-        RETURN TO FLIGHT NAVIGATION
-      </button>
-
-      {/* Surface Feature Sheet */}
-      {inspectedPin && (
-        <Sheet onClose={() => setInspectedPin(null)}>
-          {(() => {
-            const tgt = targets.find((t) => t.id === inspectedPin)!;
-            return (
-              <div>
-                <div className="text-sm font-bold text-white mb-1">{tgt.name}</div>
-                <p className="text-xs text-[#AAB4C3] mb-3">{tgt.desc}</p>
-                <div className="mono text-xs text-[#00E5FF] mb-3">
-                  Yield: +{tgt.sci} Science Points · +{tgt.gb} GB Data
+              <div className="row between">
+                <div className="row gap">
+                  <span className="cy"><Ic n={ic} s={26} /></span>
+                  <div>
+                    <h3 className="h2">{n}</h3>
+                    <div className="dim" style={{ fontSize: 13 }}>{desc}</div>
+                  </div>
                 </div>
-
+                <div className="big-num" style={{ fontSize: 54 }}>
+                  <Num v={P[k]} />
+                  <small style={{ fontSize: 20 }} className="dim">%</small>
+                </div>
+              </div>
+              <Slider id={'pri-' + k} v={P[k]} min={5} max={90} onChange={v => setPri(k, v)} label={n + ' priority'} />
+            </div>
+          ))}
+        </div>
+        <div className="col gap" style={{ width: 380 }}>
+          <div className="panel rise" style={ri(4)}>
+            <div className="lab" style={{ marginBottom: 8 }}>Command mode</div>
+            <div className="col gap8">
+              {(Object.keys(MODES) as ('CADET' | 'COMMANDER' | 'VETERAN')[]).map(m => (
                 <button
                   type="button"
-                  className="btn p min-h-[40px] text-xs cursor-pointer"
-                  onClick={() => {
-                    playSuccessChime();
-                    updateG({
-                      sciencePoints: +(g.sciencePoints + tgt.sci).toFixed(1),
-                      dataBufferGb: Math.min(g.dataBufferMaxGb, +(g.dataBufferGb + tgt.gb).toFixed(2)),
-                      surveysDone: g.surveysDone + 1,
-                      toastMessage: `SURFACE SURVEY: +${tgt.sci} Science, +${tgt.gb} GB captured!`,
-                    });
-                    setInspectedPin(null);
-                  }}
+                  key={m}
+                  className={'card ' + (S.mode === m ? 'sel' : '')}
+                  aria-pressed={S.mode === m}
+                  onClick={() => up({ mode: m })}
                 >
-                  ACQUIRE TARGET DATA
+                  <h3>{m}</h3>
+                  <p>{MODES[m]}</p>
                 </button>
+              ))}
+            </div>
+          </div>
+          <div className="panel rise grow" style={ri(5)}>
+            <div className="lab" style={{ marginBottom: 8 }}>Trade-off preview</div>
+            <div className="mono col gap8" style={{ fontSize: 13 }}>
+              <div className="row between">
+                <span className="dim">Science score</span>
+                <b className="cy">×<Num v={w('science')} d={2} /></b>
               </div>
-            );
-          })()}
-        </Sheet>
-      )}
-    </div>
+              <div className="row between">
+                <span className="dim">Damage taken</span>
+                <b className={dmgMult(S) > 1 ? 'warnc' : 'good'}>×<Num v={dmgMult(S)} d={2} /></b>
+              </div>
+              <div className="row between">
+                <span className="dim">Survival weight</span>
+                <b className="cy">×<Num v={w('safety')} d={2} /></b>
+              </div>
+              <div className="row between">
+                <span className="dim">Economy weight</span>
+                <b className="cy">×<Num v={w('economy')} d={2} /></b>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="row between rise" style={ri(6)}>
+        <Btn k="secondary" icon="back" onClick={() => go(3)}>Back</Btn>
+        <Btn glow icon="chev" onClick={() => go(5)}>Continue to design</Btn>
+      </div>
+    </section>
   );
+}
+
+/* 05 DESIGNER */
+const partMeta = (k: string, p: Part) => {
+  const base = [`${p.mass} kg`, `$${p.cost.toFixed(1)}M`];
+  if (k === 'prop') return [...base, `Isp ${p.isp}s`, `Thrust ×${p.thrust}`];
+  if (k === 'struct') return [...base, `Strength ${p.str}`];
+  if (k === 'power') return [...base, `${p.watts} W`];
+  if (k === 'shield') return [...base, `Rating ${p.rating}`];
+  if (k === 'comms') return [...base, `Gain ×${p.gain}`];
+  return [...base, `Sci ${p.sci}`, `${p.data} GB/scan`];
 };
 
-// ============================================================================
-// 11. SCREEN: MISSION DEBRIEF & SCORING
-// ============================================================================
-const ScreenDebrief: React.FC<{
-  g: GameState;
-  totals: CraftTotals;
-  onRetry: () => void;
-  onHome: () => void;
-  onLeaderboard: () => void;
-}> = ({ g, totals, onRetry, onHome, onLeaderboard }) => {
-  const isSuccess = g.healthPct >= 35 && g.sciencePoints >= 50;
+function P5() {
+  const { S, up, go } = useG();
+  const [cat, setCat] = useState('prop');
+  const d = S.design;
+  const c = calcDesign(d);
 
-  // Composite aerospace score
-  const scienceScore = Math.min(300, Math.round(g.sciencePoints * 3.5));
-  const dataScore = Math.min(250, Math.round(g.dataReturnedGb * 15));
-  const survivalScore = Math.round(g.healthPct * 2);
-  const trajectoryScore = g.missDistanceKm < 500 ? 150 : g.missDistanceKm < 5000 ? 75 : 0;
-  const compositeScore = scienceScore + dataScore + survivalScore + trajectoryScore;
+  const set = (patch: Partial<Design>) => up(s => designPatch(s, { ...s.design, ...patch }));
 
-  const medal =
-    compositeScore >= 750
-      ? '🥇 LEGENDARY FLIGHT DIRECTOR (GOLD)'
-      : compositeScore >= 550
-      ? '🥈 MISSION COMMANDER (SILVER)'
-      : '🥉 FLIGHT SPECIALIST (BRONZE)';
+  const overM = c.wet > LIM.mass;
+  const overB = c.cost > LIM.budget;
+  const lowDv = c.dv < LIM.dv;
+
+  const pick = (k: string, id: string) => {
+    playTelemetryClick();
+    if (k === 'instr') {
+      const has = d.instr.includes(id);
+      set({ instr: has ? d.instr.filter(x => x !== id) : [...d.instr, id] });
+    } else {
+      set({ [k]: id });
+    }
+  };
+
+  const lock = () => {
+    playSuccessChime();
+    up(s => {
+      const calc = calcDesign(s.design);
+      return {
+        stress: { struct: calc.structPct, thermal: calc.thermalPct, vib: calc.vibPct, result: null },
+        eventState: L(
+          s,
+          `Design locked: ${calc.P.name}, ${calc.St.name}, ${calc.Pw.name}. Wet mass ${Math.round(calc.wet)} kg, ΔV ${Math.round(calc.dv)} m/s.`
+        )
+      };
+    });
+    go(6);
+  };
 
   return (
-    <div className="flex h-full flex-col justify-between p-4 pb-8 overflow-y-auto no-scrollbar">
-      <div>
-        <div
-          className="mx-auto mb-3 mt-4 w-fit rounded-full px-5 py-1.5 font-bold text-xs tracking-wider"
-          style={{
-            background: isSuccess ? '#00E67622' : '#FFAB0022',
-            color: isSuccess ? '#00E676' : '#FFAB00',
-            border: '1px solid',
-            borderColor: isSuccess ? '#00E676' : '#FFAB00',
-          }}
-        >
-          {isSuccess ? 'MISSION NOMINAL · SUCCESS' : 'MISSION TERMINATED · FAILED'}
-        </div>
-
-        <div className="text-center font-bold text-sm text-[#00E5FF] mb-3">
-          {medal}
-        </div>
-
-        <div className="space-y-1.5 text-xs mono mb-4">
-          <div className="card flex justify-between p-2">
-            <span className="text-[#AAB4C3]">Composite Score</span>
-            <b className="text-white text-sm">{compositeScore} / 1000 PTS</b>
+    <section className="page" aria-label="Spacecraft designer">
+      <PHead n={5} title="SPACECRAFT DESIGNER" sub="Build ASTERIA-1's ride. Mass, cost and ΔV all move together." />
+      <div className="designer grow">
+        <div className="col gap8 rise" style={{ ...ri(1), minHeight: 0 }}>
+          <div className="tabs" role="tablist">
+            {CATS.map(([k, n]) => (
+              <button
+                type="button"
+                role="tab"
+                key={k}
+                className="tab"
+                aria-selected={cat === k}
+                onClick={() => {
+                  playTelemetryClick();
+                  setCat(k);
+                }}
+              >
+                {n}
+              </button>
+            ))}
           </div>
-          <div className="card flex justify-between p-2">
-            <span className="text-[#AAB4C3]">Science Gathered</span>
-            <b className="text-[#00E5FF]">{g.sciencePoints.toFixed(1)} PTS</b>
-          </div>
-          <div className="card flex justify-between p-2">
-            <span className="text-[#AAB4C3]">Data Streamed via DSN</span>
-            <b className="text-[#00E5FF]">{g.dataReturnedGb.toFixed(1)} GB</b>
-          </div>
-          <div className="card flex justify-between p-2">
-            <span className="text-[#AAB4C3]">Final Spacecraft Health</span>
-            <b className={g.healthPct > 40 ? 'text-[#00E676]' : 'up'}>
-              {Math.round(g.healthPct)}%
-            </b>
-          </div>
-          <div className="card flex justify-between p-2">
-            <span className="text-[#AAB4C3]">Final Asteroid Miss Distance</span>
-            <b className="text-white">{g.missDistanceKm.toLocaleString()} km</b>
-          </div>
-          <div className="card flex justify-between p-2">
-            <span className="text-[#AAB4C3]">Total Mission Cost</span>
-            <b className="text-white">${totals.costM}M</b>
+          <div className="partlist grow scroll">
+            {PARTS[cat]?.map(p => {
+              const sel = cat === 'instr' ? d.instr.includes(p.id) : (d as any)[cat] === p.id;
+              return (
+                <button
+                  type="button"
+                  key={p.id}
+                  className={'card ' + (sel ? 'sel' : '')}
+                  aria-pressed={sel}
+                  onClick={() => pick(cat, p.id)}
+                >
+                  <h3>{p.name}</h3>
+                  <p>{p.desc}</p>
+                  <div className="meta">
+                    {partMeta(cat, p).map(m => (
+                      <span key={m}>{m}</span>
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
+        <div className="panel craftbox gridbg rise" style={ri(2)}>
+          <Craft d={d} hl={cat} sway={true} scale={1.05} />
+          <div className="mono dim" style={{ position: 'absolute', left: 14, bottom: 10, fontSize: 11, letterSpacing: '.12em' }}>
+            SCHEMATIC · HIGHLIGHT: {CATS.find(x => x[0] === cat)![1].toUpperCase()}
+          </div>
+        </div>
+        <div className="panel col gap rise" style={ri(3)}>
+          <Meter label="Launch mass" v={c.wet} max={3200} unit=" kg" warn={2700} crit={3000.01} mark={3000} />
+          <Meter label="Budget" v={c.cost} max={46} d={1} unit=" $M" warn={40} crit={42.01} mark={42} />
+          <Meter label="Delta-V" v={c.dv} max={2400} unit=" m/s" warn={1449} crit={1100} inv={true} mark={1450} />
+          <div>
+            <div className="row between">
+              <span className="lab">Propellant load</span>
+              <span className="mono">{d.load} kg</span>
+            </div>
+            <Slider id="load" v={d.load} min={300} max={1000} step={50} onChange={v => set({ load: v })} label="Propellant load" />
+          </div>
+          {overM && <div className="banner bad"><Ic n="warn" s={14} /> OVER LAUNCH MASS BY {fmt(c.wet - LIM.mass)} KG</div>}
+          {overB && <div className="banner bad"><Ic n="warn" s={14} /> OVER BUDGET BY ${(c.cost - LIM.budget).toFixed(1)}M</div>}
+          {!overM && !overB && lowDv && <div className="banner"><Ic n="warn" s={14} /> ΔV BELOW 1,450 M/S TARGET</div>}
+          {!overM && !overB && !lowDv && <div className="banner ok">WITHIN ALL LIMITS</div>}
+        </div>
+      </div>
+      <div className="row between rise" style={ri(5)}>
+        <Btn k="secondary" icon="back" onClick={() => go(4)}>Back</Btn>
+        <Btn glow={!overM && !overB} disabled={overM || overB} icon="lock" onClick={lock}>
+          Lock design · stress test
+        </Btn>
+      </div>
+    </section>
+  );
+}
 
-        {/* Resolved event consequences */}
-        {g.resolvedEvents.length > 0 && (
-          <div className="card mb-4">
-            <div className="text-xs font-bold text-white mb-2">CRISIS DECISIONS LOG</div>
-            <div className="space-y-1.5 text-[11px] text-[#AAB4C3]">
-              {g.resolvedEvents.map((r) => (
-                <div key={r.id} className="border-b border-[#293342]/40 pb-1 last:border-none">
-                  <span className="text-[#00E5FF] font-semibold">[{r.choice.toUpperCase()}]: </span>
-                  {r.impact}
+/* 06 STRESS TEST */
+const THR: Record<string, [number, number]> = {
+  struct: [85, 100],
+  thermal: [75, 90],
+  vib: [70, 95]
+};
+
+function P6() {
+  const { S, up, go } = useG();
+  const d = S.design;
+  const st =
+    S.stress ||
+    (() => {
+      const c = calcDesign(S.design);
+      return { struct: c.structPct, thermal: c.thermalPct, vib: c.vibPct, result: null };
+    })();
+  const [p, setP] = useState(st && st.result ? 1 : 0);
+  const [run, setRun] = useState(false);
+  const raf = useRef(0);
+
+  const e = 1 - Math.pow(1 - p, 3);
+  const v = { struct: st.struct * e, thermal: st.thermal * e, vib: st.vib * e };
+  const L3 = (['struct', 'thermal', 'vib'] as const).map(k => lvl(v[k], THR[k][0], THR[k][1]));
+  const done = p >= 1;
+  const result = st.result;
+
+  const start = () => {
+    setRun(true);
+    playThrusterPulse();
+    const t0 = performance.now();
+    const D = RM ? 50 : 3600;
+    const f = (now: number) => {
+      const x = clamp((now - t0) / D, 0, 1);
+      setP(x);
+      if (x < 1) {
+        raf.current = requestAnimationFrame(f);
+      } else {
+        const ls = (['struct', 'thermal', 'vib'] as const).map(k => lvl(st[k], THR[k][0], THR[k][1]));
+        const r: 'PASS' | 'WARNING' | 'FAIL' = ls.includes('crit') ? 'FAIL' : ls.includes('warn') ? 'WARNING' : 'PASS';
+        if (r === 'FAIL') playWarningAlert();
+        else playSuccessChime();
+        up(s => ({
+          stress: { ...s.stress!, result: r },
+          eventState: L(s, `Stress test: ${r}. Structure ${Math.round(st.struct)}%, thermal ${Math.round(st.thermal)}%, vibration ${Math.round(st.vib)}%.`)
+        }));
+        setRun(false);
+      }
+    };
+    raf.current = requestAnimationFrame(f);
+  };
+
+  useEffect(() => () => cancelAnimationFrame(raf.current), []);
+
+  const pts: string[] = [];
+  for (let i = 0; i <= 40; i++) {
+    const x = i / 40;
+    if (x > p) break;
+    const y = st.thermal * (1 - Math.pow(1 - x, 3)) + Math.sin(i * 1.3) * 2;
+    pts.push(`${20 + x * 300},${150 - clamp(y, 0, 110) * 1.25}`);
+  }
+
+  const failWhy =
+    L3[0] === 'crit'
+      ? 'FRAME BUCKLING UNDER LAUNCH LOAD'
+      : L3[1] === 'crit'
+      ? 'THERMAL RUNAWAY IN THE BUS'
+      : 'ENGINE VIBRATION SHAKES MOUNTS LOOSE';
+
+  const tele: [string, 'struct' | 'thermal' | 'vib', number][] = [
+    ['STRUCTURAL LOAD', 'struct', v.struct],
+    ['THERMAL LOAD', 'thermal', v.thermal],
+    ['ENGINE VIBRATION', 'vib', v.vib]
+  ];
+
+  return (
+    <section className="page" aria-label="Stress test">
+      <PHead
+        n={6}
+        title="STRESS TEST"
+        sub="Run the structural, thermal and vibration checks. Warnings carry into launch."
+        right={done ? <div className={'stamp ' + (result === 'PASS' ? 'good' : result === 'FAIL' ? 'bad' : 'warnc')} style={{ fontSize: 34 }}>{result}</div> : null}
+      />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
+        <div className={'panel craftbox grow gridbg ' + (run || done ? 'on' : '')} style={{ overflow: 'hidden' }}>
+          <div
+            style={{ animation: run ? `shake ${Math.max(0.05, 0.5 - st.vib / 250)}s linear infinite` : 'none' }}
+            className={done && result === 'FAIL' ? 'glitchy' : ''}
+          >
+            <Craft d={d} scale={1.1} />
+          </div>
+          {run && (
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                height: '30%',
+                background: 'linear-gradient(180deg,transparent,rgba(70,224,255,.25),transparent)',
+                animation: 'sweep 1.4s linear infinite'
+              }}
+            />
+          )}
+          {done && result === 'FAIL' && <div className="banner bad" style={{ position: 'absolute', left: 16, right: 16, bottom: 14 }}>FAILURE SIMULATED · {failWhy}</div>}
+          {done && result === 'WARNING' && <div className="banner" style={{ position: 'absolute', left: 16, right: 16, bottom: 14 }}>MARGINS ARE THIN · EXPECT DAMAGE AT LAUNCH</div>}
+          {done && result === 'PASS' && <div className="banner ok" style={{ position: 'absolute', left: 16, right: 16, bottom: 14 }}>ALL CHECKS NOMINAL</div>}
+          {!run && !done && (
+            <div className="mono dim" style={{ position: 'absolute', left: 16, bottom: 14, fontSize: 12, letterSpacing: '.12em' }}>
+              TEST STAND READY
+            </div>
+          )}
+        </div>
+        <div className="col gap" style={{ width: 430 }}>
+          {tele.map(([n, k, val], i) => (
+            <div key={k} className={'panel rise ' + (L3[i] === 'crit' ? 'crit' : L3[i] === 'warn' ? 'warn' : '')} style={ri(1 + i)}>
+              <Meter label={n} v={val} max={130} unit="%" mark={100} st={L3[i]} />
+            </div>
+          ))}
+          <div className="panel rise grow" style={ri(4)}>
+            <div className="lab">Thermal response</div>
+            <svg viewBox="0 0 340 160" width="100%" height="120" role="img" aria-label="Thermal graph">
+              <g stroke="#1f3856">
+                <line x1="20" x2="330" y1="150" y2="150" />
+                <line x1="20" x2="330" y1={150 - 75 * 1.25} y2={150 - 75 * 1.25} strokeDasharray="4 4" stroke="#ffb23e" opacity="0.6" />
+                <line x1="20" x2="330" y1={150 - 90 * 1.25} y2={150 - 90 * 1.25} strokeDasharray="4 4" stroke="#ff4a5a" opacity="0.6" />
+              </g>
+              <polyline points={pts.join(' ')} fill="none" stroke="#46e0ff" strokeWidth="2.5" />
+              <text x="324" y={150 - 75 * 1.25 - 4} fill="#ffb23e" fontSize="9" textAnchor="end" fontFamily="JetBrains Mono">WARN 75%</text>
+              <text x="324" y={150 - 90 * 1.25 - 4} fill="#ff4a5a" fontSize="9" textAnchor="end" fontFamily="JetBrains Mono">FAIL 90%</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div className="row between rise" style={ri(5)}>
+        <Btn k="secondary" icon="back" disabled={run} onClick={() => go(5)}>
+          {result === 'FAIL' ? 'Retry in designer' : 'Back to designer'}
+        </Btn>
+        <div className="row gap">
+          {!done && <Btn glow icon="play" state={run ? 'loading' : ''} onClick={start}>Run stress test</Btn>}
+          {done && result === 'FAIL' && (
+            <Btn
+              k="danger"
+              icon="warn"
+              onClick={() => {
+                up(s => ({ override: true, eventState: L(s, 'Launch override: the failed stress test was ignored.') }));
+                go(7);
+              }}
+            >
+              Override and launch
+            </Btn>
+          )}
+          {done && result === 'WARNING' && <Btn glow icon="rocket" onClick={() => go(7)}>Accept risk · launch</Btn>}
+          {done && result === 'PASS' && <Btn glow icon="rocket" onClick={() => go(7)}>Proceed to launch</Btn>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* 07 LAUNCH */
+function P7() {
+  const { S, up, go } = useG();
+  const t = useTimers();
+  const [ph, setPh] = useState(0);
+  const [n, setN] = useState(10);
+  const [a, setA] = useState(0);
+  const on = useRef(false);
+  const raf = useRef(0);
+
+  const st = S.stress || { struct: 70, thermal: 60, vib: 40 };
+  const ls = (['struct', 'thermal', 'vib'] as const).map(k => lvl((st as any)[k], THR[k][0], THR[k][1]));
+  const dmg = ls.filter(x => x === 'warn').length * 8 + ls.filter(x => x === 'crit').length * 45;
+
+  const begin = () => {
+    setPh(1);
+    WARP.t = 1;
+    let c = 10;
+    setN(10);
+    const iv = setInterval(() => {
+      c--;
+      setN(c);
+      playTelemetryClick();
+      if (c === 0) {
+        clearInterval(iv);
+        ignite();
+      }
+    }, RM ? 150 : 850);
+    t(() => clearInterval(iv), 20000);
+  };
+
+  const ignite = () => {
+    setPh(2);
+    on.current = true;
+    playThrusterPulse();
+    WARP.t = RM ? 1 : 6;
+    up(s => {
+      const h = hurt(s, dmg);
+      return {
+        health: h,
+        eventState: L(s, dmg ? `Launch loads exceeded margins and cost ${Math.round(s.health - h)}% health.` : 'Launch loads stayed inside structural margins.')
+      };
+    });
+    const t0 = performance.now();
+    const D = RM ? 200 : 6200;
+    const f = (now: number) => {
+      const x = clamp((now - t0) / D, 0, 1);
+      setA(x);
+      if (x < 1) {
+        raf.current = requestAnimationFrame(f);
+      } else {
+        on.current = false;
+        WARP.t = 1;
+        setPh(3);
+        playSuccessChime();
+      }
+    };
+    raf.current = requestAnimationFrame(f);
+  };
+
+  useEffect(() => () => {
+    cancelAnimationFrame(raf.current);
+    WARP.t = 1;
+  }, []);
+
+  const quake = (ph === 1 && n <= 3) || ph === 2;
+
+  return (
+    <section className="page full" aria-label="Launch">
+      <div className={quake ? 'quake' : ''} style={{ position: 'absolute', inset: 0 }}>
+        {ph < 3 && (
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 190,
+              transform: `translateY(${a * 900}px)`,
+              background: 'linear-gradient(180deg,#0b1626,#06101c)',
+              borderTop: '2px solid var(--line2)'
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                marginLeft: -80,
+                top: 0,
+                width: 160,
+                height: 90,
+                borderLeft: '3px solid var(--line2)',
+                borderRight: '3px solid var(--line2)',
+                opacity: 0.6
+              }}
+            />
+          </div>
+        )}
+        {ph < 3 && (
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              marginLeft: -150,
+              top: ph === 2 ? 200 - a * 60 : 230,
+              width: 300,
+              height: 420,
+              transition: 'top .3s'
+            }}
+          >
+            <svg viewBox="0 0 300 420" width="300" height="420" style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }} aria-label="Launch vehicle">
+              <g transform="translate(0,-60)">
+                <path d="M150 40 C178 90 182 150 180 210 L120 210 C118 150 122 90 150 40Z" fill="#c9d8e8" />
+                <path d="M120 210 L100 268 L120 250Z M180 210 L200 268 L180 250Z" fill="#8da6c2" />
+                <rect x="120" y="208" width="60" height="12" fill="#46e0ff" opacity="0.8" />
+                <circle cx="150" cy="118" r="10" fill="#0b2a47" stroke="#46e0ff" />
+              </g>
+            </svg>
+            <div style={{ position: 'absolute', left: 0, top: 196 }}>
+              <Exhaust on={on} />
+            </div>
+          </div>
+        )}
+        {ph === 3 && (
+          <>
+            <div className="floaty" style={{ position: 'absolute', left: '50%', marginLeft: -250, top: 200 }}>
+              <Craft d={S.design} burn={false} scale={1.15} />
+            </div>
+            <div
+              style={{
+                position: 'absolute',
+                left: -200,
+                right: -200,
+                bottom: -540,
+                height: 700,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle at 50% 8%,#1c4a78,#0a1c33 60%,#050b16)',
+                border: '2px solid rgba(70,224,255,.35)',
+                boxShadow: '0 -10px 60px rgba(70,224,255,.3)'
+              }}
+            />
+          </>
+        )}
+      </div>
+      <div style={{ position: 'absolute', left: 40, top: 84 }} className="rise">
+        <div className="pidx">07 / 20</div>
+        <h1 className="h2" style={{ fontSize: 30 }}>LAUNCH</h1>
+      </div>
+      {ph === 1 && (
+        <div style={{ position: 'absolute', left: 0, right: 0, top: 230, textAlign: 'center' }}>
+          <div className="countdown" aria-live="assertive">T-{pad(n)}</div>
+        </div>
+      )}
+      {ph === 0 && (
+        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }} className="rise">
+          <div className="mono dim" style={{ letterSpacing: '.14em' }}>
+            STRESS TEST {S.override ? 'OVERRIDDEN' : (S.stress && S.stress.result) || '—'} · LAUNCH LOAD RISK {dmg ? '−' + Math.round(dmg * dmgMult(S)) + '% HEALTH' : 'LOW'}
+          </div>
+          <Btn glow icon="rocket" onClick={begin}>Begin countdown</Btn>
+        </div>
+      )}
+      {(ph === 2 || ph === 3) && (
+        <div className="panel col gap8" style={{ position: 'absolute', right: 40, top: 100, width: 260 }}>
+          <div className="lab">Ascent telemetry</div>
+          <div className="row between"><span className="dim">Altitude</span><b className="mono"><Num v={Math.round(a * 200)} dur={150} /> km</b></div>
+          <div className="row between"><span className="dim">Velocity</span><b className="mono"><Num v={a * 7.8} d={2} dur={150} /> km/s</b></div>
+          <div className="row between"><span className="dim">Load</span><b className={'mono ' + (ph === 2 && a < 0.6 ? 'warnc' : '')}><Num v={ph === 3 ? 0 : 1.2 + Math.sin(a * 9) * 0.4 + a * 2.6} d={1} dur={150} /> g</b></div>
+          <Meter label="Health" v={S.health} unit="%" warn={50} crit={25} inv={true} />
+        </div>
+      )}
+      {ph === 3 && (
+        <div className="col gap rise" style={{ position: 'absolute', left: 0, right: 0, bottom: 60, alignItems: 'center' }}>
+          <div className="stamp cy" style={{ fontSize: 34 }}>ORBIT ACHIEVED</div>
+          <div className="mono dim">{dmg ? `LAUNCH LOADS COST ${Math.round(dmg * dmgMult(S))}% HEALTH` : 'NO STRUCTURAL DAMAGE'}</div>
+          <Btn glow icon="chev" onClick={() => go(8)}>Continue to cruise</Btn>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* 08 CRUISE */
+const PATH = 'M110 470 C330 150 680 130 930 262';
+
+function P8() {
+  const { S, up, go } = useG();
+  const pr = useRef<SVGPathElement | null>(null);
+  const [pt, setPt] = useState({ x: 110, y: 470, a: -60 });
+  const [burn, setBurn] = useState(false);
+  const t = useTimers();
+
+  useEffect(() => {
+    const p = pr.current;
+    if (!p) return;
+    const len = p.getTotalLength();
+    const l = (len * S.cruise) / 100;
+    const a = p.getPointAtLength(l);
+    const b = p.getPointAtLength(Math.min(len, l + 4));
+    setPt({ x: a.x, y: a.y, a: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI });
+  }, [S.cruise]);
+
+  const eta = (100 - S.cruise) * 1.9;
+
+  const correct = () => {
+    if (S.deltaV < 40 || burn || (S.cd.corr || 0) > 0) return;
+    setBurn(true);
+    playThrusterPulse();
+    t(() => setBurn(false), 1800);
+    up(s => ({
+      ...dvPatch(s, 40),
+      nav: Math.min(100, s.nav + 12),
+      cd: { ...s.cd, corr: 6 },
+      eventState: L(s, 'Trajectory correction burn spent 40 m/s and improved navigation to ' + Math.min(100, s.nav + 12) + '%.')
+    }));
+  };
+
+  return (
+    <section className="page full" aria-label="Cruise">
+      <svg viewBox="0 0 1280 720" width="1280" height="720" style={{ position: 'absolute', inset: 0 }} aria-hidden="true">
+        <g style={{ transform: `translateX(${-S.cruise * 1.6}px)`, transition: 'transform .3s linear' }}>
+          <circle cx="-60" cy="760" r="330" fill="#0c2342" stroke="#2fb4d6" strokeOpacity="0.5" />
+          <circle cx="-60" cy="760" r="348" fill="none" stroke="#46e0ff" strokeOpacity="0.18" strokeWidth="14" />
+        </g>
+        <g style={{ transform: `translateX(${-S.cruise * 0.5}px)`, transition: 'transform .3s linear' }} opacity="0.7">
+          <circle cx="1130" cy="140" r="26" fill="#ffb23e" opacity="0.85" />
+          <circle cx="1130" cy="140" r="50" fill="none" stroke="#ffb23e" strokeOpacity="0.25" />
+        </g>
+        <path ref={pr} d={PATH} fill="none" stroke="#46e0ff" strokeWidth="2" strokeDasharray="8 8" className="flow" opacity="0.7" />
+        <g transform="translate(895,227)"><Asteria size={70} /></g>
+        <g style={{ transform: `translate(${pt.x}px,${pt.y}px) rotate(${pt.a}deg)`, transition: 'transform .26s linear' }}>
+          <g transform="scale(.2) translate(-225,-130)"><Craft d={S.design} burn={burn} /></g>
+          <circle r="26" fill="none" stroke="#46e0ff" strokeOpacity="0.5" className="pulse" />
+          {burn && <path d="M-14 0 L-60 -4 L-60 4Z" fill="#ffb23e" className="flame" />}
+          <line x1="14" y1="0" x2="62" y2="0" stroke="#5cf2b0" strokeWidth="2" />
+          <path d="M62 0 l-8 -5 l0 10z" fill="#5cf2b0" />
+        </g>
+      </svg>
+      <div style={{ padding: '84px 40px 0' }} className="rise">
+        <div className="pidx">08 / 20</div>
+        <h1 className="h2" style={{ fontSize: 30 }}>CRUISE</h1>
+        <p className="dim" style={{ maxWidth: 520, marginTop: 4 }}>Coast toward ASTERIA-1. Time warp saves time but not fuel. Corrections buy docking accuracy.</p>
+      </div>
+      <div className="panel col gap rise" style={{ ...ri(2), position: 'absolute', right: 40, top: 100, width: 320 }}>
+        <Meter label="Trajectory progress" v={S.cruise} unit="%" d={1} big={true} />
+        <div className="row between mono"><span className="dim">ETA</span><b><Num v={eta} d={0} /> days</b></div>
+        <Meter label="Fuel (ΔV left)" v={S.fuel} unit="%" d={1} warn={25} crit={12} inv={true} hint={fmt(S.deltaV) + ' m/s'} />
+        <Meter label="Navigation accuracy" v={S.nav} unit="%" warn={60} crit={40} inv={true} />
+        <div>
+          <div className="lab" style={{ marginBottom: 6 }}>Time warp</div>
+          <div className="row gap8">
+            {[1, 4, 8].map(w => (
+              <button
+                type="button"
+                key={w}
+                className="tab"
+                style={{ flex: 1 }}
+                aria-selected={S.warp === w}
+                onClick={() => {
+                  playTelemetryClick();
+                  up({ warp: w });
+                }}
+              >
+                ×{w}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="row between" style={{ position: 'absolute', left: 40, right: 40, bottom: 30 }}>
+        <Btn k="secondary" icon="flame" disabled={S.deltaV < 40 || (S.cd.corr || 0) > 0} onClick={correct} state={burn ? 'loading' : ''}>
+          Correction burn · 40 m/s
+        </Btn>
+        <div className="row gap">
+          {S.cruise < 30 && <span className="mono dim" style={{ fontSize: 12 }}>TELEMETRY LINK AT 30%</span>}
+          <Btn glow={S.cruise >= 30} icon="chev" disabled={S.cruise < 30} onClick={() => go(9)}>
+            Open telemetry
+          </Btn>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* 09 TELEMETRY */
+function P9() {
+  const { S, go } = useG();
+  const ref = useRef(S);
+  ref.current = S;
+  const tl = thermalLoad(S);
+  const sg = signalQ(S);
+  const getv = () => {
+    const s = ref.current;
+    return [
+      thermalLoad(s) / 120,
+      0.62 + Math.sin(performance.now() / 900) * 0.05,
+      signalQ(s),
+      0.25 + Math.sin(performance.now() / 700) * 0.1 + (s.nav < 50 ? 0.2 : 0)
+    ];
+  };
+  const stT = tl > 80 ? 'Critical' : tl > 65 ? 'Warning' : 'Nominal';
+  const logs = [
+    'DSN lock acquired', 'Star tracker residual 0.02°', 'Hall thruster idle',
+    'Bus current nominal', 'Radiator loop 2 flow OK', 'Reaction wheel temp stable',
+    'Packet queue clear', 'Solar array tracking sun', 'Memory scrub complete',
+    'Attitude hold within 0.1°'
+  ];
+  const [off, setOff] = useState(0);
+
+  useEffect(() => {
+    if (RM) return;
+    const i = setInterval(() => setOff(o => o + 1), 1200);
+    return () => clearInterval(i);
+  }, []);
+
+  return (
+    <section className="page" aria-label="Telemetry">
+      <PHead n={9} title="TELEMETRY" sub="Live systems feed. Watch the dashed thresholds." />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
+        <div className="panel rise" style={{ ...ri(1), padding: 10 }}>
+          <TeleCanvas getv={getv} />
+        </div>
+        <div className="col gap grow">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }} className="rise">
+            <Tele label="THERMAL LOAD" v={tl} unit="%" st={stT} />
+            <Tele label="HEALTH" v={S.health} unit="%" st={S.health < 25 ? 'Critical' : S.health < 50 ? 'Warning' : 'Nominal'} />
+            <Tele label="FUEL" v={S.fuel} unit="%" d={1} st={S.fuel < 12 ? 'Critical' : S.fuel < 25 ? 'Warning' : 'Nominal'} />
+            <Tele label="SIGNAL" v={sg * 100} unit="%" st={sg < 0.35 ? 'Warning' : 'Nominal'} />
+          </div>
+          <div className="panel grow logbox rise" style={ri(3)}>
+            <div className="lab" style={{ marginBottom: 6 }}>System log</div>
+            {[0, 1, 2, 3, 4, 5].map(i => (
+              <div key={off - i}>T+{pad(Math.floor(S.met / 3600))}h · {logs[(off + i * 3) % logs.length]}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="row between rise" style={ri(4)}>
+        <Btn k="secondary" icon="back" onClick={() => go(8)}>Back to cruise</Btn>
+        <div className="row gap">
+          {S.cruise < 60 && <span className="mono dim" style={{ fontSize: 12 }}>ANOMALY WINDOW AT 60% · NOW {Math.round(S.cruise)}%</span>}
+          <Btn glow={S.cruise >= 60} k={S.cruise >= 60 ? 'danger' : 'primary'} icon="warn" disabled={S.cruise < 60} onClick={() => go(10)}>
+            Anomaly alert
+          </Btn>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* 10 EVENT */
+function P10() {
+  const { S, up, go } = useG();
+  const ev = EVENTS[S.eventId] || EVENTS.meteor;
+  const pick = S.eventPick;
+  const [show, setShow] = useState(false);
+  const t = useTimers();
+  const [res, setRes] = useState<any>(null);
+
+  useEffect(() => {
+    playWarningAlert();
+    t(() => setShow(true), RM ? 0 : 900);
+  }, []);
+
+  const choose = (i: number) => {
+    if (pick != null) return;
+    const o = ev.opts[i];
+    const r = o.run(S);
+    const dmg = (r.dmg || 0) * dmgMult(S);
+    setRes({ k: o.k, hp: -Math.round(dmg * 10) / 10, dv: -(r.dv || 0), nav: r.nav || 0, data: r.data || 0, log: r.log });
+    playSuccessChime();
+    up(s => {
+      const o2: any = {
+        eventPick: i,
+        eventState: {
+          ...L(s, r.log + '.'),
+          decisionHistory: [
+            ...s.eventState.decisionHistory,
+            { page: 10, label: ev.title, choice: o.k, effect: `${dmg ? '−' + Math.round(dmg) + '% health' : 'no damage'}${r.dv ? ', −' + r.dv + ' m/s' : ''}${r.nav ? `, nav ${r.nav > 0 ? '+' : ''}${r.nav}` : ''}` }
+          ]
+        }
+      };
+      if (dmg) o2.health = hurt(s, r.dmg || 0);
+      if (r.dv) Object.assign(o2, dvPatch(s, r.dv));
+      if (r.nav) o2.nav = clamp(s.nav + r.nav, 5, 100);
+      if (r.data) {
+        const nd = clamp(s.dataQueue + r.data, 0, s.maxDataStorage);
+        o2.dataQueue = nd;
+        if (r.data > 0) o2.queueValue = s.queueValue + r.data * 3;
+      }
+      if (r.power) {
+        const p = { ...s.power };
+        for (const k in r.power) p[k as keyof typeof p] = clamp(p[k as keyof typeof p] + (r.power as any)[k], 5, 70);
+        o2.power = p;
+      }
+      return o2;
+    });
+  };
+
+  const ready = S.cruise >= 100;
+
+  return (
+    <section className="page full" aria-label="Random event">
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'radial-gradient(ellipse at center,transparent 40%,rgba(255,74,90,.28))',
+          animation: 'critflash 1s ease-in-out infinite alternate',
+          opacity: pick == null ? 1 : 0.2,
+          transition: 'opacity .6s'
+        }}
+      />
+      <div style={{ position: 'absolute', left: 0, right: 0, top: 84, textAlign: 'center' }} className="alarm">
+        {pick == null ? '⚠ ANOMALY DETECTED' : 'EVENT RESOLVED'}
+      </div>
+      <div
+        className={'panel crit ' + (pick != null && res ? '' : '')}
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: 120,
+          width: 760,
+          marginLeft: -380,
+          animation: RM ? 'none' : 'pop 600ms var(--ease) both',
+          opacity: pick != null ? 0.96 : 1,
+          transition: 'opacity .5s'
+        }}
+      >
+        <div className="row gap">
+          <span className="bad"><Ic n={ev.icon} s={34} /></span>
+          <div>
+            <div className="pidx" style={{ color: 'var(--red)' }}>10 / 20 · EVENT</div>
+            <h1 className="h2" style={{ fontSize: 28 }}>{ev.title}</h1>
+          </div>
+        </div>
+        <p style={{ marginTop: 10, color: 'var(--mute)', fontSize: 16 }}>{ev.text}</p>
+        <div className="col gap8" style={{ marginTop: 16 }}>
+          {show &&
+            ev.opts.map((o, i) => (
+              <button
+                type="button"
+                key={i}
+                className={'card rise ' + (pick === i ? 'sel' : '')}
+                style={{ ...ri(i), opacity: pick != null && pick !== i ? 0.3 : 1 }}
+                disabled={pick != null && pick !== i}
+                onClick={() => choose(i)}
+              >
+                <div className="row between">
+                  <h3>{String.fromCharCode(65 + i)} · {o.k}</h3>
+                  {pick === i && <span className="cy"><Ic n="lock" s={18} /></span>}
+                </div>
+                <p>{o.sub}</p>
+              </button>
+            ))}
+        </div>
+        {res && (
+          <div className="row gap wrap mono" style={{ marginTop: 14, fontSize: 13, animation: 'rise .5s both' }}>
+            <span className={'pill ' + (res.hp < 0 ? 'bad' : 'good')}>HEALTH {res.hp < 0 ? res.hp : '±0'}%</span>
+            {res.dv < 0 && <span className="pill warnc">ΔV {res.dv} m/s</span>}
+            {res.nav !== 0 && <span className={'pill ' + (res.nav > 0 ? 'good' : 'warnc')}>NAV {res.nav > 0 ? '+' : ''}{res.nav}%</span>}
+            {res.data !== 0 && <span className="pill cy">DATA {res.data > 0 ? '+' : ''}{res.data} GB</span>}
+          </div>
+        )}
+      </div>
+      <div className="row between" style={{ position: 'absolute', left: 40, right: 40, bottom: 30 }}>
+        <span className="mono dim" style={{ fontSize: 12 }}>
+          {pick == null ? 'CHOOSE A RESPONSE' : ready ? 'APPROACH WINDOW OPEN' : `APPROACH WINDOW IN ${Math.ceil((100 - S.cruise) / (1.2 * S.warp))}s`}
+        </span>
+        <div className="row gap">
+          {pick != null && !ready && (
+            <div style={{ width: 220 }}>
+              <Meter label="Cruise" v={S.cruise} unit="%" />
+            </div>
+          )}
+          <Btn glow={pick != null && ready} icon="chev" disabled={pick == null || !ready} onClick={() => go(11)}>
+            Begin approach
+          </Btn>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* 11 APPROACH */
+function P11() {
+  const { S, up, go } = useG();
+  const prog = 1 - (S.range - 60) / 1740;
+  const sc = lerp(0.22, 1.9, Math.pow(prog, 1.5));
+  const lock = S.range < 600;
+  const ready = S.range <= 60.5;
+
+  const brake = () => {
+    if (S.vel <= 6 || S.deltaV < 25) return;
+    playThrusterPulse();
+    up(s => ({
+      vel: Math.max(6, s.vel - 12),
+      ...dvPatch(s, 25),
+      eventState: L(s, 'Braking burn cut closing speed by 12 m/s and cost 25 m/s of ΔV.')
+    }));
+  };
+
+  return (
+    <section className="page full" aria-label="Approach">
+      <svg viewBox="0 0 1280 720" width="1280" height="720" style={{ position: 'absolute', inset: 0 }} aria-hidden="true">
+        <g style={{ transform: 'translate(640px,380px)' }}>
+          {[1, 2, 3].map(i => (
+            <ellipse
+              key={i}
+              rx={120 * i * (1 + prog)}
+              ry={60 * i * (1 + prog)}
+              fill="none"
+              stroke="#46e0ff"
+              strokeOpacity={0.28 / i}
+              strokeDasharray="6 8"
+              className="flow"
+            />
+          ))}
+          <g style={{ transform: `scale(${sc})`, transition: 'transform .3s linear' }}>
+            <Asteria size={260} />
+          </g>
+          {lock && (
+            <g>
+              <circle r={150 * Math.max(0.6, sc * 0.7)} fill="none" stroke="#5cf2b0" strokeWidth="2" strokeDasharray="14 10" className="rot fast" />
+              <path d="M-30 0H30M0 -30V30" stroke="#5cf2b0" />
+            </g>
+          )}
+        </g>
+        <g stroke="#5cf2b0" strokeWidth="2" opacity="0.85" style={{ transform: 'translate(210px,560px)' }}>
+          <line x1="0" y1="0" x2={Math.min(180, S.vel * 1.8)} y2={-Math.min(100, S.vel)} className="flow" strokeDasharray="10 6" />
+        </g>
+      </svg>
+      <div style={{ padding: '84px 40px 0' }} className="rise">
+        <div className="pidx">11 / 20</div>
+        <h1 className="h2" style={{ fontSize: 30 }}>APPROACH</h1>
+        <p className="dim" style={{ maxWidth: 520, marginTop: 4 }}>
+          Brake before arrival. Closing speed carries into docking, and every brake burn spends ΔV.
+        </p>
+      </div>
+      <div className="panel col gap rise" style={{ ...ri(2), position: 'absolute', left: 40, top: 210, width: 300 }}>
+        <div className="row between">
+          <span className="lab">Range</span>
+          <b className="mono" style={{ fontSize: 26 }}><Num v={S.range} d={0} /> <small className="dim">km</small></b>
+        </div>
+        <div className="row between">
+          <span className="lab">Closing speed</span>
+          <b className={'mono ' + (S.vel > 30 ? 'warnc' : 'good')} style={{ fontSize: 26 }}><Num v={S.vel} /> <small className="dim">m/s</small></b>
+        </div>
+        <Meter label="Fuel (ΔV left)" v={S.fuel} unit="%" d={1} warn={25} crit={12} inv={true} hint={fmt(S.deltaV) + ' m/s'} />
+        <div className={'pill ' + (lock ? 'good' : 'dim')} style={{ alignSelf: 'flex-start' }}>{lock ? 'TARGET LOCK' : 'ACQUIRING'}</div>
+        {S.vel > 30 && <div className="banner">HIGH CLOSING SPEED · DOCKING WILL BE HARSH</div>}
+      </div>
+      <div className="row between" style={{ position: 'absolute', left: 40, right: 40, bottom: 30 }}>
+        <Btn k="secondary" icon="flame" disabled={S.vel <= 6 || S.deltaV < 25} onClick={brake}>
+          Braking burn · −12 m/s · 25 ΔV
+        </Btn>
+        <div className="row gap">
+          {!ready && <span className="mono dim" style={{ fontSize: 12 }}>RENDEZVOUS AT RANGE 60 KM</span>}
+          <Btn glow={ready} icon="target" disabled={!ready} onClick={() => go(12)}>
+            Begin rendezvous
+          </Btn>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* 12 RENDEZVOUS — Docking mini-game */
+function P12() {
+  const { S, up, go } = useG();
+  const cv = useRef<HTMLCanvasElement | null>(null);
+  const sim = useRef<any>(null);
+  const [ph, setPh] = useState<'idle' | 'run' | 'ok' | 'bad'>('idle');
+  const [hud, setHud] = useState({ z: 100, vz: 0, off: 0, vl: 0 });
+
+  const reset = () => {
+    const spread = (100 - S.nav) * 1.1 + 25;
+    sim.current = {
+      x: rnd(-spread, spread),
+      y: rnd(-spread, spread) * 0.7,
+      vx: rnd(-0.5, 0.5),
+      vy: rnd(-0.5, 0.5),
+      z: 100,
+      vz: Math.max(1, S.vel / 12),
+      pulses: 0,
+      state: 'run',
+      tx: 0
+    };
+  };
+
+  const pulse = (dx: number, dy: number, dz: number) => {
+    const m = sim.current;
+    if (!m || m.state !== 'run') return;
+    if (S.deltaV - m.pulses * 1.5 < 1.5) return;
+    playThrusterPulse();
+    m.pulses++;
+    m.vx += dx * 0.35;
+    m.vy += dy * 0.35;
+    m.vz = Math.max(0.2, m.vz + dz * 0.35);
+  };
+
+  const begin = () => {
+    reset();
+    setPh('run');
+  };
+
+  const finish = (ok: boolean) => {
+    const m = sim.current;
+    m.state = ok ? 'ok' : 'bad';
+    const dv = m.pulses * 1.5;
+    if (ok) {
+      setPh('ok');
+      playSuccessChime();
+      up(s => ({
+        ...dvPatch(s, dv),
+        docked: 'success',
+        eventState: {
+          ...L(s, 'Docked with ASTERIA-1 after ' + m.pulses + ' RCS pulses.'),
+          decisionHistory: [...s.eventState.decisionHistory, { page: 12, label: 'Rendezvous', choice: 'Manual docking', effect: 'docked, ' + m.pulses + ' pulses' }]
+        }
+      }));
+    } else {
+      setPh('bad');
+      playWarningAlert();
+      up(s => ({
+        ...dvPatch(s, dv),
+        health: hurt(s, 12),
+        eventState: L(s, 'Docking failed at ' + m.vz.toFixed(1) + ' m/s closing speed.')
+      }));
+    }
+  };
+
+  useEffect(() => {
+    const kd = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'b', 'f'].includes(k)) {
+        e.preventDefault();
+        if (e.repeat) return;
+        if (k === 'arrowleft') pulse(-1, 0, 0);
+        if (k === 'arrowright') pulse(1, 0, 0);
+        if (k === 'arrowup') pulse(0, -1, 0);
+        if (k === 'arrowdown') pulse(0, 1, 0);
+        if (k === ' ' || k === 'b') pulse(0, 0, -1);
+        if (k === 'f') pulse(0, 0, 1);
+      }
+    };
+    window.addEventListener('keydown', kd);
+    return () => window.removeEventListener('keydown', kd);
+  }, [S.deltaV]);
+
+  useEffect(() => {
+    const c = cv.current;
+    if (!c) return;
+    const x = c.getContext('2d');
+    if (!x) return;
+    let raf: number;
+    let last = performance.now();
+    let acc = 0;
+
+    const f = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const m = sim.current;
+      x.clearRect(0, 0, 600, 420);
+      x.strokeStyle = 'rgba(70,224,255,.12)';
+      for (let i = 0; i <= 12; i++) {
+        x.beginPath();
+        x.moveTo(i * 50, 0);
+        x.lineTo(i * 50, 420);
+        x.stroke();
+      }
+      for (let i = 0; i <= 8; i++) {
+        x.beginPath();
+        x.moveTo(0, i * 52.5);
+        x.lineTo(600, i * 52.5);
+        x.stroke();
+      }
+      const cx = 300;
+      const cy = 210;
+
+      if (m) {
+        if (m.state === 'run') {
+          m.x += m.vx * dt * 14;
+          m.y += m.vy * dt * 14;
+          m.z -= m.vz * dt;
+          acc += dt;
+          if (acc > 0.1) {
+            acc = 0;
+            setHud({ z: Math.max(0, m.z), vz: m.vz, off: Math.hypot(m.x, m.y), vl: Math.hypot(m.vx, m.vy) });
+          }
+          if (m.z <= 0) {
+            const ok = Math.hypot(m.x, m.y) <= 14 && m.vz <= 2.5 && Math.hypot(m.vx, m.vy) <= 0.8;
+            finish(ok);
+          }
+        }
+        const k = clamp(1 - m.z / 100, 0, 1);
+        const R = lerp(26, 140, k * k);
+
+        /* port */
+        x.strokeStyle = '#5cf2b0';
+        x.lineWidth = 2;
+        x.beginPath();
+        x.arc(cx, cy, R, 0, 6.283);
+        x.stroke();
+        x.strokeStyle = 'rgba(92,242,176,.35)';
+        x.beginPath();
+        x.arc(cx, cy, R * 0.55, 0, 6.283);
+        x.stroke();
+        for (let i = 0; i < 8; i++) {
+          const a = i * 0.785 + performance.now() / 6000;
+          x.beginPath();
+          x.moveTo(cx + Math.cos(a) * R * 0.9, cy + Math.sin(a) * R * 0.9);
+          x.lineTo(cx + Math.cos(a) * R * 1.1, cy + Math.sin(a) * R * 1.1);
+          x.stroke();
+        }
+
+        /* craft reticle */
+        const px = cx + (m.x * R) / 60;
+        const py = cy + (m.y * R) / 60;
+        const good = Math.hypot(m.x, m.y) <= 14 && m.vz <= 2.5 && Math.hypot(m.vx, m.vy) <= 0.8;
+        x.strokeStyle = m.state === 'bad' ? '#ff4a5a' : good ? '#5cf2b0' : '#46e0ff';
+        x.lineWidth = 2.5;
+        x.beginPath();
+        x.arc(px, py, 12 + R * 0.12, 0, 6.283);
+        x.stroke();
+        x.beginPath();
+        x.moveTo(px - 24 - R * 0.1, py);
+        x.lineTo(px - 8, py);
+        x.moveTo(px + 8, py);
+        x.lineTo(px + 24 + R * 0.1, py);
+        x.moveTo(px, py - 24 - R * 0.1);
+        x.lineTo(px, py - 8);
+        x.moveTo(px, py + 8);
+        x.lineTo(px, py + 24 + R * 0.1);
+        x.stroke();
+        x.strokeStyle = 'rgba(70,224,255,.4)';
+        x.setLineDash([4, 6]);
+        x.beginPath();
+        x.moveTo(cx, cy);
+        x.lineTo(px, py);
+        x.stroke();
+        x.setLineDash([]);
+
+        if (m.state === 'ok') {
+          m.tx += dt;
+          const r = lerp(220, 30, Math.min(1, m.tx * 1.4));
+          x.strokeStyle = `rgba(92,242,176,${1 - Math.min(1, m.tx * 0.8) * 0.5})`;
+          x.lineWidth = 6;
+          x.beginPath();
+          x.arc(cx, cy, r, 0, 6.283);
+          x.stroke();
+        }
+        if (m.state === 'bad') {
+          m.tx += dt;
+          x.strokeStyle = '#ff4a5a';
+          x.lineWidth = 2;
+          for (let i = 0; i < 14; i++) {
+            const a = i * 0.45;
+            const d = m.tx * 180 + i * 4;
+            x.beginPath();
+            x.moveTo(px + Math.cos(a) * d * 0.4, py + Math.sin(a) * d * 0.4);
+            x.lineTo(px + Math.cos(a) * d, py + Math.sin(a) * d);
+            x.stroke();
+          }
+        }
+      }
+      raf = requestAnimationFrame(f);
+    };
+    raf = requestAnimationFrame(f);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const stab = hud.vz <= 2.5 && hud.vl <= 0.8;
+
+  const retry = () => {
+    if (S.deltaV >= 60) {
+      up(s => ({ ...dvPatch(s, 60), eventState: L(s, 'Retry approach cost 60 m/s of ΔV.') }));
+      begin();
+    }
+  };
+
+  const abort = () => {
+    up(s => ({
+      docked: 'abort',
+      eventState: {
+        ...L(s, 'Docking aborted. Mission continues as a flyby with halved science.'),
+        decisionHistory: [...s.eventState.decisionHistory, { page: 12, label: 'Rendezvous', choice: 'Abort to flyby', effect: 'science ×0.5' }]
+      }
+    }));
+    go(13);
+  };
+
+  return (
+    <section className="page" aria-label="Rendezvous">
+      <PHead
+        n={12}
+        title="RENDEZVOUS"
+        sub="Line up the reticle on the docking port. Touch down slow and centered."
+        right={
+          <div className="mono dim" style={{ fontSize: 12 }}>
+            KEYS <span className="kbd">←↑↓→</span> lateral · <span className="kbd">SPACE</span> brake · <span className="kbd">F</span> forward
+          </div>
+        }
+      />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
+        <div className={'panel craftbox ' + (ph === 'bad' ? 'shake' : '')} style={{ width: 624, padding: 12, background: ph === 'bad' ? 'rgba(60,8,14,.8)' : undefined }}>
+          <canvas ref={cv} width="600" height="420" style={{ width: 600, height: 420 }} role="img" aria-label="Docking view" />
+          {ph === 'ok' && <div className="stamp good" style={{ position: 'absolute', fontSize: 36 }}>DOCKED</div>}
+          {ph === 'bad' && <div className="stamp bad glitchy" style={{ position: 'absolute', fontSize: 34 }}>DOCKING FAILED</div>}
+        </div>
+        <div className="col gap grow">
+          <div className="panel col gap rise" style={ri(1)}>
+            <div className="row between"><span className="lab">Distance to port</span><b className="mono" style={{ fontSize: 24 }}>{hud.z.toFixed(1)} m</b></div>
+            <Meter label="Closing speed" v={hud.vz} max={8} d={2} unit=" m/s" warn={2.5} crit={5} mark={2.5} />
+            <Meter label="Lateral drift" v={hud.vl} max={3} d={2} unit=" m/s" warn={0.8} crit={1.8} mark={0.8} />
+            <Meter label="Offset" v={hud.off} max={90} d={0} unit=" m" warn={14} crit={35} mark={14} />
+            <div className={'banner ' + (stab ? 'ok' : '')}>{stab ? 'VELOCITY STABILIZED' : 'STABILIZE VELOCITY'}</div>
+          </div>
+          <div className="row gap20 rise" style={ri(2)}>
+            <div className="dpad" role="group" aria-label="Thruster controls">
+              <span />
+              <Btn k="secondary" icon="chev" title="Thrust up" onClick={() => pulse(0, -1, 0)} cls="up" />
+              <span />
+              <Btn k="secondary" icon="back" title="Thrust left" onClick={() => pulse(-1, 0, 0)} />
+              <Btn k="secondary" icon="x" title="Brake" onClick={() => pulse(0, 0, -1)} />
+              <Btn k="secondary" icon="chev" title="Thrust right" onClick={() => pulse(1, 0, 0)} />
+              <span />
+              <Btn k="secondary" icon="chev" title="Thrust down" onClick={() => pulse(0, 1, 0)} cls="down" />
+              <span />
+            </div>
+            <div className="col gap8 grow">
+              <Btn k="secondary" sm onClick={() => pulse(0, 0, -1)}>Brake · −0.35</Btn>
+              <Btn k="secondary" sm onClick={() => pulse(0, 0, 1)}>Forward · +0.35</Btn>
+              <div className="mono dim" style={{ fontSize: 11 }}>Each pulse costs 1.5 m/s of ΔV · {fmt(S.deltaV)} left</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="row between rise" style={ri(3)}>
+        <span className="mono dim" style={{ fontSize: 12 }}>
+          {ph === 'idle' ? 'READY FOR FINAL APPROACH' : ph === 'run' ? 'DOCKING IN PROGRESS' : ''}
+        </span>
+        <div className="row gap">
+          {ph === 'idle' && <Btn glow icon="play" onClick={begin}>Begin final approach</Btn>}
+          {ph === 'ok' && <Btn glow icon="chev" onClick={() => go(13)}>Begin science</Btn>}
+          {ph === 'bad' && <Btn k="secondary" icon="skip" onClick={abort}>Abort · flyby science</Btn>}
+          {ph === 'bad' && <Btn icon="refresh" disabled={S.deltaV < 60} onClick={retry}>Retry · −60 ΔV</Btn>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* 13 SCIENCE */
+function P13() {
+  const { S, up, go } = useG();
+  const [beam, setBeam] = useState<string | null>(null);
+  const t = useTimers();
+  const ins = S.design.instr.map(id => findP('instr', id));
+  const yld = sciYield(S);
+  const mult = S.docked === 'success' ? 1 : 0.5;
+
+  const scan = (i: Part) => {
+    const n = S.scans[i.id] || 0;
+    if (n >= 3 || (S.cd[i.id] || 0) > 0 || beam) return;
+    if (i.needsDock && S.docked !== 'success') return;
+    setBeam(i.id);
+    playThrusterPulse();
+    t(() => setBeam(null), 1400);
+    const pts = Math.round(i.sci * yld * mult * 10) / 10;
+    t(() => {
+      playSuccessChime();
+      up(s => {
+        const room = s.maxDataStorage - s.dataQueue;
+        const keep = Math.min(room, i.data);
+        const frac = keep / i.data;
+        return {
+          scienceScore: s.scienceScore + pts,
+          scans: { ...s.scans, [i.id]: (s.scans[i.id] || 0) + 1 },
+          cd: { ...s.cd, [i.id]: 4 },
+          dataQueue: s.dataQueue + keep,
+          queueValue: s.queueValue + pts * frac,
+          heatSpike: s.heatSpike + i.heat * 1.6,
+          eventState: L(s, `${i.name} scan: +${pts} points, +${keep.toFixed(1)} GB${frac < 1 ? ' (storage full, data lost)' : ''}.`)
+        };
+      });
+    }, RM ? 0 : 1100);
+  };
+
+  return (
+    <section className="page" aria-label="Science">
+      <PHead
+        n={13}
+        title="SCIENCE"
+        sub="Activate each instrument up to three times. Points only count once the data reaches Earth."
+        right={
+          <div className="col" style={{ alignItems: 'flex-end' }}>
+            <div className="lab">Collected</div>
+            <div className="big-num cy" style={{ fontSize: 46 }}><Num v={S.scienceScore} d={0} /></div>
+          </div>
+        }
+      />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
+        <div className="panel craftbox grow gridbg rise" style={ri(1)}>
+          <div style={{ position: 'absolute', left: 30, top: 80 }}><Craft d={S.design} scale={0.5} /></div>
+          <div style={{ position: 'relative', marginLeft: 180 }}>
+            <Asteria size={300} scan={!!beam} />
+            {beam && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: -200,
+                  top: '50%',
+                  width: 200,
+                  height: 3,
+                  background: 'linear-gradient(90deg,transparent,#5cf2b0)',
+                  boxShadow: '0 0 16px #5cf2b0',
+                  animation: 'pulse .35s infinite'
+                }}
+              />
+            )}
+          </div>
+          {S.docked !== 'success' && <div className="banner" style={{ position: 'absolute', left: 14, right: 14, bottom: 12 }}>FLYBY MODE · SCIENCE ×0.5 · SAMPLE COLLECTOR LOCKED</div>}
+          <div className="mono dim" style={{ position: 'absolute', left: 14, top: 12, fontSize: 11 }}>
+            YIELD ×{yld.toFixed(2)} · POWER {S.power.science}%
+          </div>
+        </div>
+        <div className="col gap8" style={{ width: 440, minHeight: 0 }}>
+          <div className="partlist scroll">
+            {ins.map(i => {
+              const n = S.scans[i.id] || 0;
+              const cdv = S.cd[i.id] || 0;
+              const lockd = i.needsDock && S.docked !== 'success';
+              const off = n >= 3 || lockd;
+              return (
+                <div key={i.id} className="panel row gap" style={{ padding: '10px 14px', opacity: lockd ? 0.45 : 1 }}>
+                  <div className="grow">
+                    <h3 className="h2" style={{ fontSize: 15 }}>{i.name}</h3>
+                    <div className="mono dim" style={{ fontSize: 11, marginTop: 2 }}>
+                      +{(i.sci * yld * mult).toFixed(1)} pts · +{i.data} GB · scans {n}/3
+                    </div>
+                    <div className="meter" style={{ marginTop: 6 }}>
+                      <div className="bar" style={{ height: 5 }}>
+                        <div className="fill" style={{ width: (n / 3) * 100 + '%' }} />
+                      </div>
+                    </div>
+                  </div>
+                  <Btn sm k={off ? 'secondary' : 'primary'} disabled={off || cdv > 0 || !!beam} icon={lockd ? 'lock' : 'scan'} onClick={() => scan(i)}>
+                    {lockd ? 'Locked' : n >= 3 ? 'Done' : cdv > 0 ? cdv.toFixed(0) + 's' : beam === i.id ? 'Scanning' : 'Scan'}
+                  </Btn>
+                </div>
+              );
+            })}
+          </div>
+          <div className="panel col gap8">
+            <Meter label="Data queue" v={S.dataQueue} max={S.maxDataStorage} d={1} unit=" GB" warn={S.maxDataStorage * 0.75} crit={S.maxDataStorage * 0.95} />
+            <Meter label="Thermal load" v={thermalLoad(S)} max={120} unit="%" warn={65} crit={80} />
+          </div>
+        </div>
+      </div>
+      <div className="row between rise" style={ri(3)}>
+        <span className="mono dim" style={{ fontSize: 12 }}>Scans add heat. Science power sets yield.</span>
+        <Btn glow icon="chev" onClick={() => go(14)}>Data management</Btn>
+      </div>
+    </section>
+  );
+}
+
+/* 14 DATA MANAGEMENT */
+function P14() {
+  const { S, up, go } = useG();
+  const [busy, setBusy] = useState<'ll' | 'lossy' | false>(false);
+  const [stage, setStage] = useState(Math.round(S.dataQueue));
+  const t = useTimers();
+  const maxS = Math.floor(S.dataQueue);
+
+  useEffect(() => setStage(s => Math.min(s, Math.floor(S.dataQueue))), [S.dataQueue]);
+
+  const compress = (lossy: boolean) => {
+    if (busy || S.dataQueue <= 0) return;
+    setBusy(lossy ? 'lossy' : 'll');
+    playTelemetryClick();
+    t(() => {
+      playSuccessChime();
+      up(s => {
+        const comp = s.power.computing;
+        const ratio = lossy ? clamp(0.35 + comp * 0.006, 0.3, 0.6) : (0.1 + comp * 0.004) * Math.pow(0.6, s.compCount);
+        const nd = s.dataQueue * (1 - ratio);
+        const nv = lossy ? s.queueValue * 0.8 : s.queueValue;
+        return {
+          dataQueue: nd,
+          queueValue: nv,
+          compCount: lossy ? s.compCount : s.compCount + 1,
+          eventState: L(s, `${lossy ? 'Lossy' : 'Lossless'} compression cut the queue by ${Math.round(ratio * 100)}%${lossy ? ' and discarded 20% of its science value' : ''}.`)
+        };
+      });
+      setBusy(false);
+    }, RM ? 0 : 1500);
+  };
+
+  const stageNow = () => {
+    if (stage <= 0) return;
+    playSuccessChime();
+    up(s => {
+      const amt = Math.min(stage, s.dataQueue);
+      const f = s.dataQueue > 0 ? amt / s.dataQueue : 0;
+      return {
+        dataQueue: s.dataQueue - amt,
+        queueValue: s.queueValue * (1 - f),
+        txBuffer: s.txBuffer + amt,
+        txValue: s.txValue + s.queueValue * f,
+        eventState: L(s, `Staged ${amt.toFixed(1)} GB for uplink.`)
+      };
+    });
+  };
+
+  const fill = S.dataQueue / S.maxDataStorage;
+  const packets = Math.min(14, Math.ceil(S.dataQueue / 2.4));
+
+  return (
+    <section className="page" aria-label="Data management">
+      <PHead n={14} title="DATA MANAGEMENT" sub="Storage is limited. Compress to make room, then stage data for the uplink." />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
+        <div className="panel col rise" style={{ ...ri(1), width: 330 }}>
+          <Meter label="Onboard storage" v={S.dataQueue} max={S.maxDataStorage} d={1} unit=" GB" warn={S.maxDataStorage * 0.75} crit={S.maxDataStorage * 0.95} big={true} />
+          <div className="grow" style={{ position: 'relative', marginTop: 14, border: '1px solid var(--line)', overflow: 'hidden', borderRadius: 3 }}>
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: fill * 100 + '%', background: 'linear-gradient(180deg,rgba(70,224,255,.35),rgba(70,224,255,.12))', transition: 'height .5s var(--ease)' }} />
+            <div style={{ position: 'absolute', inset: 10, display: 'flex', flexWrap: 'wrap', gap: 6, alignContent: 'flex-end' }}>
+              {Array.from({ length: packets }).map((_, i) => (
+                <i
+                  key={i}
+                  style={{
+                    width: 44,
+                    height: 18,
+                    background: 'var(--cyan)',
+                    opacity: 0.85,
+                    borderRadius: 2,
+                    transform: busy ? 'scaleX(.55)' : 'none',
+                    transition: 'transform .7s var(--ease)',
+                    animation: busy ? 'none' : `pulse ${1.4 + i * 0.1}s ease-in-out infinite`
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="mono dim" style={{ fontSize: 11, marginTop: 8 }}>Queue value: {S.queueValue.toFixed(0)} pts pending</div>
+        </div>
+        <div className="col gap grow">
+          <div className="panel col gap rise" style={ri(2)}>
+            <div className="lab">Compression · uses computing power ({S.power.computing}%)</div>
+            <div className="row gap">
+              <Btn k="secondary" icon="cpu" state={busy === 'll' ? 'loading' : ''} disabled={!!busy || S.dataQueue <= 0} onClick={() => compress(false)}>
+                Lossless · −{Math.round((0.1 + S.power.computing * 0.004) * Math.pow(0.6, S.compCount) * 100)}%
+              </Btn>
+              <Btn k="secondary" icon="cpu" state={busy === 'lossy' ? 'loading' : ''} disabled={!!busy || S.dataQueue <= 0} onClick={() => compress(true)}>
+                Lossy · −{Math.round(clamp(0.35 + S.power.computing * 0.006, 0.3, 0.6) * 100)}% / value −20%
+              </Btn>
+            </div>
+            <div className="dim" style={{ fontSize: 13 }}>Lossless works less each time you repeat it. Lossy frees the most space but throws away part of the science value.</div>
+          </div>
+          <div className="panel col gap rise" style={ri(3)}>
+            <div className="lab">Stage for uplink</div>
+            <div className="row between">
+              <span className="mono" style={{ fontSize: 24 }}><Num v={stage} d={0} /> GB</span>
+              <Btn icon="data" disabled={stage <= 0} onClick={stageNow}>Stage batch</Btn>
+            </div>
+            <Slider id="stage" v={Math.min(stage, maxS)} min={0} max={Math.max(1, maxS)} onChange={setStage} label="Amount to stage" disabled={maxS < 1} />
+          </div>
+          <div className="panel rise" style={ri(4)}>
+            <Meter label="Uplink buffer (staged)" v={S.txBuffer} max={S.maxDataStorage} d={1} unit=" GB" />
+            {S.txBuffer > 0 && <div className="banner ok" style={{ marginTop: 10 }}>TRANSFER CONFIRMED · {S.txBuffer.toFixed(1)} GB READY FOR COMMS</div>}
+          </div>
+        </div>
+      </div>
+      <div className="row between rise" style={ri(5)}>
+        <Btn k="secondary" icon="back" onClick={() => go(13)}>Back to science</Btn>
+        <Btn glow icon="chev" onClick={() => go(15)}>Power management</Btn>
+      </div>
+    </section>
+  );
+}
+
+/* 15 POWER */
+function P15() {
+  const { S, up, go } = useG();
+  const p = S.power;
+
+  const setP = (k: keyof typeof p, v: number) => {
+    up(s => {
+      const q = { ...s.power };
+      const o = (Object.keys(q) as (keyof typeof q)[]).filter(x => x !== k);
+      const rest = 100 - v;
+      const tot = o.reduce((a, x) => a + q[x], 0) || 1;
+      let acc = 0;
+      o.forEach((x, i) => {
+        const nv = i === o.length - 1 ? rest - acc : Math.round((q[x] / tot) * rest);
+        q[x] = Math.max(5, nv);
+        acc += q[x];
+      });
+      const sum = Object.values(q).reduce((a, b) => a + b, 0) + v;
+      if (sum !== 100) {
+        const big = o.reduce((a, x) => (q[x] > q[a] ? x : a), o[0]);
+        q[big] -= sum - 100;
+      }
+      q[k] = v;
+      return { power: q };
+    });
+  };
+
+  const tl = thermalLoad(S);
+  const w = findP('power', S.design.power).watts || 1000;
+  const rows: [keyof typeof p, string, string, string][] = [
+    ['science', 'SCIENCE', 'scan', 'Instrument yield'],
+    ['comms', 'COMMS', 'sig', 'Signal strength'],
+    ['computing', 'COMPUTING', 'cpu', 'Compression'],
+    ['thermal', 'THERMAL', 'therm', 'Cooling']
+  ];
+  const nodes: Record<string, [number, number]> = {
+    science: [210, 70],
+    comms: [610, 70],
+    computing: [210, 300],
+    thermal: [610, 300]
+  };
+
+  return (
+    <section className="page" aria-label="Power management">
+      <PHead n={15} title="POWER MANAGEMENT" sub={`Bus output ${fmt(w)} W. Every watt you give one system is taken from another.`} />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
+        <div className="panel rise" style={{ ...ri(1), width: 810, padding: 8 }}>
+          <svg viewBox="0 0 820 400" width="100%" height="100%" role="img" aria-label="Power distribution">
+            {Object.entries(nodes).map(([k, [x, y]]) => (
+              <g key={k}>
+                <line
+                  x1="410"
+                  y1="200"
+                  x2={x + 90}
+                  y2={y + 45}
+                  stroke={k === 'thermal' && tl > 80 ? '#ff4a5a' : '#46e0ff'}
+                  strokeWidth={1 + p[k as keyof typeof p] / 6}
+                  strokeDasharray="10 8"
+                  className="flow"
+                  style={{ animationDuration: 2.4 - p[k as keyof typeof p] / 25 + 's' }}
+                  opacity="0.85"
+                />
+                <rect x={x} y={y} width="180" height="90" rx="3" fill="#0b1422" stroke={k === 'thermal' && tl > 80 ? '#ff4a5a' : '#2c4f78'} />
+                <text x={x + 14} y={y + 26} fill="#8da6c2" fontFamily="JetBrains Mono" fontSize="11" letterSpacing="2">{k.toUpperCase()}</text>
+                <text x={x + 14} y={y + 62} fill="#e8f2fc" fontFamily="JetBrains Mono" fontSize="28" fontWeight="600">{p[k as keyof typeof p]}%</text>
+                <text x={x + 166} y={y + 62} fill="#46e0ff" fontFamily="JetBrains Mono" fontSize="12" textAnchor="end">{fmt((w * p[k as keyof typeof p]) / 100)} W</text>
+              </g>
+            ))}
+            <circle cx="410" cy="200" r="46" fill="#10223a" stroke="#46e0ff" strokeWidth="2" />
+            <circle cx="410" cy="200" r="58" fill="none" stroke="#46e0ff" strokeOpacity="0.35" className="scanring" />
+            <text x="410" y="196" textAnchor="middle" fill="#46e0ff" fontFamily="Chakra Petch" fontWeight="700" fontSize="16">BUS</text>
+            <text x="410" y="216" textAnchor="middle" fill="#8da6c2" fontFamily="JetBrains Mono" fontSize="11">{fmt(w)} W</text>
+          </svg>
+        </div>
+        <div className="col gap grow">
+          <div className="panel col gap8 rise" style={ri(2)}>
+            {rows.map(([k, n, ic, eff]) => (
+              <div key={k}>
+                <div className="row between">
+                  <span className="row gap8">
+                    <span className="cy"><Ic n={ic} s={16} /></span>
+                    <span className="lab">{n}</span>
+                  </span>
+                  <span className="mono dim" style={{ fontSize: 11 }}>{eff}</span>
+                </div>
+                <Slider id={'pw-' + k} v={p[k]} min={5} max={70} onChange={v => setP(k, v)} label={n + ' power'} />
+              </div>
+            ))}
+          </div>
+          <div className="panel col gap8 rise" style={ri(3)}>
+            <Meter label="Thermal load" v={tl} max={120} unit="%" warn={65} crit={80} big={true} />
+            <div className="mono dim col" style={{ fontSize: 12, gap: 2 }}>
+              <span>Science yield ×{sciYield(S).toFixed(2)}</span>
+              <span>Signal quality {Math.round(signalQ(S) * 100)}%</span>
+              <span>Lossless ratio {Math.round((0.1 + p.computing * 0.004) * 100)}%</span>
+            </div>
+            {tl > 80 ? (
+              <div className="banner bad">OVERHEATING · HULL DAMAGE IN PROGRESS</div>
+            ) : tl > 65 ? (
+              <div className="banner">THERMAL MARGIN LOW</div>
+            ) : (
+              <div className="banner ok">THERMAL NOMINAL</div>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="row between rise" style={ri(4)}>
+        <Btn k="secondary" icon="back" onClick={() => go(14)}>Back to data</Btn>
+        <Btn glow icon="chev" onClick={() => go(16)}>Communications</Btn>
+      </div>
+    </section>
+  );
+}
+
+/* 16 COMMUNICATION */
+function P16() {
+  const { S, up, go } = useG();
+  const [tx, setTx] = useState(false);
+  const [pk, setPk] = useState<{ id: number; ok: boolean }[]>([]);
+  const ref = useRef(S);
+  ref.current = S;
+  const id = useRef(0);
+
+  useEffect(() => {
+    if (!tx) return;
+    const iv = setInterval(() => {
+      const s = ref.current;
+      if (s.txBuffer <= 0.01) {
+        setTx(false);
+        playSuccessChime();
+        return;
+      }
+      const gain = findP('comms', s.design.comms).gain || 1;
+      const size = Math.min(s.txBuffer, 0.5 * gain);
+      const ok = Math.random() < signalQ(s);
+      const pid = ++id.current;
+      setPk(a => [...a.slice(-6), { id: pid, ok }]);
+      if (ok) playTelemetryClick();
+      else playWarningAlert();
+      up(q => {
+        const f = q.txBuffer > 0 ? size / q.txBuffer : 0;
+        return ok
+          ? { txBuffer: q.txBuffer - size, txValue: q.txValue * (1 - f), banked: q.banked + q.txValue * f, delivered: q.delivered + size }
+          : { lostPackets: q.lostPackets + 1 };
+      });
+    }, RM ? 200 : 450);
+    return () => clearInterval(iv);
+  }, [tx]);
+
+  const sg = signalQ(S);
+  const repoint = () => {
+    if (S.repointCd > 0) return;
+    playSuccessChime();
+    up(s => ({ repoint: 10, repointCd: 30, eventState: L(s, 'Antenna repoint boosted the link for 10 seconds.') }));
+  };
+
+  return (
+    <section className="page" aria-label="Communication">
+      <PHead
+        n={16}
+        title="COMMUNICATION"
+        sub="Send staged data to Earth. Lost packets are resent, and each resend costs time."
+        right={
+          <div className="col" style={{ alignItems: 'flex-end' }}>
+            <div className="lab">Banked score</div>
+            <div className="big-num good" style={{ fontSize: 46 }}><Num v={S.banked} d={0} /></div>
+          </div>
+        }
+      />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
+        <div className="panel grow rise" style={{ ...ri(1), position: 'relative', overflow: 'hidden' }}>
+          <svg viewBox="0 0 700 360" width="100%" height="100%" aria-label="Signal beam">
+            <g transform="translate(60,170) scale(.5) translate(-225,-130)"><Craft d={S.design} /></g>
+            <circle cx="620" cy="180" r="62" fill="#0c2342" stroke="#2fb4d6" />
+            <path d="M590 160 q18 -14 36 4 q10 14 -6 28 q-18 8 -30 -10z" fill="#1d6a8a" opacity="0.7" />
+            <line
+              x1="160"
+              y1="150"
+              x2="560"
+              y2="180"
+              stroke={S.repoint > 0 ? '#5cf2b0' : '#46e0ff'}
+              strokeWidth={1 + sg * 5}
+              strokeDasharray="12 10"
+              className={tx ? 'flow' : ''}
+              opacity={tx ? 0.9 : 0.3}
+            />
+            {tx && <circle cx="360" cy="165" r="48" fill="none" stroke="#46e0ff" className="scanring" opacity="0.5" />}
+            {pk.map(k => (
+              <g key={k.id} style={{ '--d': '400px', animation: 'packet .9s linear both' } as any} transform="translate(150,146)">
+                {k.ok ? (
+                  <rect width="14" height="8" fill="#5cf2b0" rx="1" />
+                ) : (
+                  <g>
+                    <rect width="14" height="8" fill="#ff4a5a" rx="1" opacity="0.8" style={{ animation: 'flick .4s linear' }} />
+                  </g>
+                )}
+              </g>
+            ))}
+          </svg>
+          <div className="mono dim" style={{ position: 'absolute', left: 14, bottom: 10, fontSize: 11 }}>
+            DELIVERED {S.delivered.toFixed(1)} GB · PACKETS LOST {S.lostPackets}
+          </div>
+        </div>
+        <div className="col gap" style={{ width: 380 }}>
+          <div className="panel col gap rise" style={ri(2)}>
+            <Meter label="Signal strength" v={sg * 100} unit="%" warn={50} crit={35} inv={true} big={true} />
+            <div className="mono dim" style={{ fontSize: 12 }}>
+              Comms power {S.power.comms}% · {findP('comms', S.design.comms).name} · packet loss ≈ {Math.round((1 - sg) * 100)}%
+            </div>
+            <Meter label="Uplink buffer" v={S.txBuffer} max={S.maxDataStorage} d={1} unit=" GB" />
+            <div className="row gap8">
+              <Btn k="secondary" sm icon="target" disabled={S.repointCd > 0} onClick={repoint}>
+                {S.repointCd > 0 ? Math.ceil(S.repointCd) + 's' : 'Repoint antenna'}
+              </Btn>
+              <Btn sm k={tx ? 'danger' : 'primary'} icon={tx ? 'x' : 'sig'} disabled={S.txBuffer <= 0.01 && !tx} onClick={() => setTx(!tx)}>
+                {tx ? 'Pause' : 'Transmit'}
+              </Btn>
+            </div>
+            {S.txBuffer <= 0.01 && !tx && (
+              <div className="banner">{S.delivered > 0 ? 'BUFFER EMPTY · ALL STAGED DATA SENT' : 'NOTHING STAGED · RETURN TO DATA MANAGEMENT'}</div>
+            )}
+          </div>
+          {S.dataQueue > 0 && <div className="banner">{S.dataQueue.toFixed(1)} GB STILL ONBOARD, NOT STAGED</div>}
+        </div>
+      </div>
+      <div className="row between rise" style={ri(3)}>
+        <Btn k="secondary" icon="back" onClick={() => { setTx(false); go(14); }}>Back to data</Btn>
+        <Btn glow={S.txBuffer <= 0.01} k={S.txBuffer > 0.01 ? 'danger' : 'primary'} icon="warn" onClick={() => { setTx(false); go(17); }}>
+          Proceed to crisis window
+        </Btn>
+      </div>
+    </section>
+  );
+}
+
+/* 17 CRISIS */
+function P17() {
+  const { S, up, go } = useG();
+  const pick = S.crisisPick;
+  const tl = thermalLoad(S);
+  const done = useRef(false);
+  const base = 20 + Math.max(0, tl - 55) * 1.2;
+  const comp = S.power.computing;
+
+  useEffect(() => {
+    playWarningAlert();
+  }, []);
+
+  const OPTS = [
+    {
+      k: 'Reroute coolant through the computing bus',
+      sub: 'Works better with more computing power. Shifts +20 to thermal.',
+      calc: () => ({ dmg: (base * 0.5) / clamp(comp / 25, 0.4, 1.2), power: { thermal: 20, science: -20 }, txt: 'Coolant reroute' })
+    },
+    {
+      k: 'Enter safe mode',
+      sub: 'Steady, never perfect. Loses 30% of the uplink buffer.',
+      calc: () => ({ dmg: base * 0.6 + 5, lose: 0.3, txt: 'Safe mode' })
+    },
+    {
+      k: 'Vent coolant and bypass the loop',
+      sub: comp >= 20 ? 'Computing power is high enough to run the bypass.' : 'Computing under 20%. This is likely to go badly.',
+      calc: () => ({ dmg: comp >= 20 ? base * 0.2 : base * 1.5, txt: 'Vent and bypass' })
+    }
+  ];
+
+  const resolve = (i: number | null) => {
+    if (done.current) return;
+    done.current = true;
+    const o = i == null ? { calc: () => ({ dmg: base * 1.6, txt: 'No action taken', power: undefined, lose: undefined }), k: 'No decision' } : OPTS[i];
+    const r = o.calc();
+    up(s => {
+      const dm = r.dmg;
+      const h = hurt(s, dm);
+      const o2: any = {
+        crisisPick: i == null ? -1 : i,
+        crisisDmg: Math.round((s.health - h) * 10) / 10,
+        health: h,
+        eventState: {
+          ...L(s, `Crisis: ${r.txt} cost ${Math.round(s.health - h)}% health.`),
+          decisionHistory: [
+            ...s.eventState.decisionHistory,
+            { page: 17, label: 'Coolant loop failure', choice: o.k, effect: `−${Math.round(s.health - h)}% health` }
+          ]
+        }
+      };
+      if (r.power) {
+        const q = { ...s.power };
+        for (const k in r.power) q[k as keyof typeof q] = clamp(q[k as keyof typeof q] + (r.power as any)[k], 5, 70);
+        const sum = Object.values(q).reduce((a, b) => a + b, 0);
+        if (sum !== 100) q.computing -= sum - 100;
+        o2.power = q;
+      }
+      if (r.lose) {
+        o2.txBuffer = s.txBuffer * (1 - r.lose);
+        o2.txValue = s.txValue * (1 - r.lose);
+      }
+      return o2;
+    });
+  };
+
+  useEffect(() => {
+    if (S.crisisLeft <= 0 && S.crisisPick == null) resolve(null);
+  }, [S.crisisLeft]);
+
+  const rem = Math.ceil(S.crisisLeft);
+
+  return (
+    <section className={'page ' + (pick == null ? '' : '')} aria-label="Crisis">
+      <PHead
+        n={17}
+        title="CRISIS"
+        sub="Radiator coolant loop failure. Heat is building and the bus is degrading."
+        right={
+          pick == null ? (
+            <div className="col" style={{ alignItems: 'flex-end' }}>
+              <div className="alarm">DECIDE NOW</div>
+              <div className="big-num bad" style={{ fontSize: 64 }}>{pad(rem)}</div>
+            </div>
+          ) : null
+        }
+      />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch' }}>
+        <div className="panel crit col gap rise" style={{ ...ri(1), width: 420 }}>
+          <div className="alarm">⚠ EMERGENCY PANEL</div>
+          <div className={pick == null ? 'flick' : ''}>
+            <Meter label="Hull health" v={S.health} unit="%" d={0} warn={50} crit={25} inv={true} big={true} />
+          </div>
+          <div className={pick == null ? 'flick' : ''}>
+            <Meter label="Thermal load" v={tl + (pick == null ? (20 - S.crisisLeft) * 0.8 : 0)} max={120} unit="%" warn={65} crit={80} big={true} />
+          </div>
+          <Meter label="Bus integrity" v={Math.max(0, S.health - (pick == null ? (20 - S.crisisLeft) * 0.4 : 0))} unit="%" warn={50} crit={25} inv={true} />
+          <div className="mono dim" style={{ fontSize: 12 }}>
+            Severity base {base.toFixed(0)}% · comp {comp}% · thermal {S.power.thermal}%
+          </div>
+        </div>
+        <div className="col gap8 grow">
+          {OPTS.map((o, i) => (
+            <button
+              type="button"
+              key={i}
+              className={'card rise ' + (pick === i ? 'sel' : '')}
+              style={{ ...ri(2 + i), opacity: pick != null && pick !== i ? 0.3 : 1, minHeight: 84 }}
+              disabled={pick != null}
+              onClick={() => resolve(i)}
+            >
+              <div className="row between">
+                <h3 style={{ fontSize: 17 }}>{String.fromCharCode(65 + i)} · {o.k}</h3>
+                {pick === i && <span className="cy"><Ic n="lock" s={18} /></span>}
+              </div>
+              <p style={{ fontSize: 14 }}>{o.sub}</p>
+            </button>
+          ))}
+          {pick != null && (
+            <div className={'banner rise ' + (S.health > 0 ? '' : 'bad')} style={{ fontSize: 13 }}>
+              {pick === -1 ? 'TIME EXPIRED · WORST CASE APPLIED · ' : ''}
+              {S.crisisDmg > 0 ? `HULL DAMAGE −${S.crisisDmg}%` : 'NO DAMAGE'} · HEALTH NOW {Math.round(S.health)}%
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="row between rise" style={ri(5)}>
+        <span className="mono dim" style={{ fontSize: 12 }}>{pick == null ? 'NO DECISION IN TIME MEANS THE WORST OUTCOME' : ''}</span>
+        <Btn glow={pick != null} k={pick != null && S.health <= 0 ? 'danger' : 'primary'} icon="chev" disabled={pick == null} onClick={() => go(18)}>
+          Assess damage
+        </Btn>
+      </div>
+    </section>
+  );
+}
+
+/* 18 RECOVERY / FAILURE */
+function P18() {
+  const { S, up, go, retry } = useG();
+  const fail = S.health <= 0 || S.outcome === 'failure';
+  const t = useTimers();
+
+  useEffect(() => {
+    if (fail) {
+      playWarningAlert();
+      up({ outcome: 'failure', health: 0 });
+      return;
+    }
+    playSuccessChime();
+    t(() => {
+      up(s => ({
+        health: Math.min(100, s.health + 12),
+        outcome: 'success',
+        eventState: L(s, 'System reboot restored 12% health.')
+      }));
+    }, RM ? 0 : 1800);
+  }, []);
+
+  return (
+    <section className={'page full ' + (fail ? '' : '')} aria-label={fail ? 'Mission failure' : 'System recovery'}>
+      {fail ? (
+        <div style={{ position: 'absolute', inset: 0, background: '#000', animation: 'blackout 2.4s ease-in both' }} />
+      ) : (
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center,rgba(92,242,176,.18),transparent 60%)', animation: 'boot 2s both' }} />
+      )}
+      <div className="col" style={{ position: 'absolute', left: 0, right: 0, top: 130, alignItems: 'center', gap: 18, textAlign: 'center' }}>
+        <div className="pidx rise">18 / 20</div>
+        {fail ? (
+          <>
+            <div className="stamp bad glitchy" style={{ animationDelay: '.5s' }}>SIGNAL LOST</div>
+            <p className="dim rise" style={{ ...ri(2), maxWidth: 560, fontSize: 16 }}>
+              Telemetry has stopped. The spacecraft did not survive the crisis. Whatever data was already home still counts.
+            </p>
+            <div className="mono bad flick">TELEMETRY FAILURE · NO CARRIER</div>
+          </>
+        ) : (
+          <>
+            <div className="stamp good">SYSTEMS REBOOT</div>
+            <div className="panel col gap rise" style={{ ...ri(2), width: 460 }}>
+              <Meter label="Health restoring" v={S.health} unit="%" big={true} warn={50} crit={25} inv={true} />
+              <div className="mono good" style={{ fontSize: 12 }}>BUS STABILIZED · GREEN</div>
+            </div>
+          </>
+        )}
+      </div>
+      <div className="row gap" style={{ position: 'absolute', left: 0, right: 0, bottom: 60, justifyContent: 'center' }}>
+        {fail && <Btn k="secondary" icon="refresh" onClick={retry}>Retry from designer</Btn>}
+        <Btn glow icon="chev" onClick={() => go(19)}>
+          {fail ? 'Final mission report' : 'Mission debrief'}
+        </Btn>
+      </div>
+    </section>
+  );
+}
+
+/* 19 DEBRIEF */
+function P19() {
+  const { S, go, retry, restart } = useG();
+  const sc = useMemo(() => finalScore(S), []);
+  const [shown, setShown] = useState(0);
+  const t = useTimers();
+
+  useEffect(() => {
+    if (sc.total > bestGet()) bestSet(sc.total);
+    const n = S.eventState.causalLog.length;
+    let i = 0;
+    const iv = setInterval(() => {
+      i++;
+      setShown(i);
+      if (i >= n) clearInterval(iv);
+    }, RM ? 10 : 260);
+    t(() => clearInterval(iv), 30000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const tlr = S.timeline.filter(x => x.p >= 6);
+  const W = 360;
+  const H = 150;
+  const pt = (k: 'health' | 'fuel') =>
+    tlr.map((x, i) => `${10 + (i / Math.max(1, tlr.length - 1)) * (W - 20)},${H - 10 - (clamp(x[k], 0, 100) / 100) * (H - 24)}`).join(' ');
+
+  const col = sc.grade === 'F' ? 'bad' : sc.verdict === 'MISSION SUCCESS' ? 'good' : 'warnc';
+  const D = S.eventState.decisionHistory;
+  const cp = findP('prop', S.design.prop).name;
+
+  return (
+    <section className="page" aria-label="Debrief">
+      <PHead n={19} title="MISSION DEBRIEF" right={<div className={'stamp ' + col} style={{ fontSize: 34 }}>{sc.verdict}</div>} />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch', minHeight: 0 }}>
+        <div className="col gap" style={{ width: 330 }}>
+          <div className="panel rise col" style={{ ...ri(1), alignItems: 'center', gap: 4 }}>
+            <div className="lab">Final score</div>
+            <div className="big-num" style={{ fontSize: 76 }}><Num v={sc.total} start={0} dur={1800} /></div>
+            <div className="mono">GRADE <b className={col} style={{ fontSize: 26 }}>{sc.grade}</b></div>
+          </div>
+          <div className="panel col gap8 rise" style={ri(2)}>
+            {[
+              ['Science (banked)', sc.sci, S.banked.toFixed(0) + ' pts sent'],
+              ['Survival', sc.surv, Math.round(S.health) + '% health'],
+              ['Economy', sc.eco, '$' + (S.budget / 1e6).toFixed(1) + 'M · ' + S.fuel.toFixed(0) + '% fuel']
+            ].map(([l, v, sub]) => (
+              <div key={l as string}>
+                <div className="row between">
+                  <span className="lab">{l as string}</span>
+                  <b className="mono"><Num v={v as number} start={0} dur={1500} /></b>
+                </div>
+                <div className="dim mono" style={{ fontSize: 11 }}>{sub as string}</div>
+              </div>
+            ))}
+            <div className="mono dim" style={{ fontSize: 11 }}>
+              Collected {S.scienceScore.toFixed(0)} · lost packets {S.lostPackets} · unsent {(S.dataQueue + S.txBuffer).toFixed(1)} GB
+            </div>
+          </div>
+          <div className="panel rise" style={ri(3)}>
+            <div className="lab">Mission timeline</div>
+            <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Health and fuel over the mission">
+              <g stroke="#1f3856">
+                <line x1="10" x2={W - 10} y1={H - 10} y2={H - 10} />
+                <line x1="10" x2={W - 10} y1="12" y2="12" strokeDasharray="3 4" />
+              </g>
+              <polyline
+                points={pt('health')}
+                fill="none"
+                stroke="#5cf2b0"
+                strokeWidth="2.5"
+                pathLength={1}
+                strokeDasharray="1"
+                style={{ strokeDashoffset: 1, animation: 'drawline 1.6s .3s var(--ease) forwards' }}
+              />
+              <polyline
+                points={pt('fuel')}
+                fill="none"
+                stroke="#46e0ff"
+                strokeWidth="2.5"
+                pathLength={1}
+                strokeDasharray="1"
+                style={{ strokeDashoffset: 1, animation: 'drawline 1.6s .6s var(--ease) forwards' }}
+              />
+              <text x="14" y="10" fill="#5cf2b0" fontSize="9" fontFamily="JetBrains Mono">HEALTH</text>
+              <text x="70" y="10" fill="#46e0ff" fontSize="9" fontFamily="JetBrains Mono">FUEL</text>
+            </svg>
+          </div>
+        </div>
+        <div className="col gap grow" style={{ minHeight: 0 }}>
+          <div className="panel grow col rise" style={{ ...ri(2), minHeight: 0 }}>
+            <div className="lab" style={{ marginBottom: 8 }}>Why it happened · causal log</div>
+            <div className="scroll grow col gap8" style={{ minHeight: 0 }}>
+              {S.eventState.causalLog.slice(0, shown).map((l, i) => (
+                <div key={i} className="row gap" style={{ animation: 'rise .4s both', alignItems: 'flex-start' }}>
+                  <span className="mono cy" style={{ fontSize: 11, flex: 'none', width: 64 }}>T+{pad(Math.floor(l.met / 3600))}h</span>
+                  <span style={{ fontSize: 13.5 }}>{l.text}</span>
                 </div>
               ))}
             </div>
           </div>
-        )}
-      </div>
-
-      <div className="space-y-2 mt-auto">
-        <button
-          type="button"
-          className="btn p cursor-pointer"
-          onClick={onRetry}
-        >
-          RETRY MISSION (NEW DESIGN)
-        </button>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="btn flex-1 text-xs cursor-pointer"
-            onClick={onLeaderboard}
-          >
-            VIEW RECORDS
-          </button>
-          <button
-            type="button"
-            className="btn flex-1 text-xs cursor-pointer"
-            onClick={onHome}
-          >
-            MAIN MENU
-          </button>
+          <div className="panel rise" style={ri(4)}>
+            <div className="lab" style={{ marginBottom: 6 }}>Decision tree</div>
+            <svg viewBox="0 0 560 100" width="100%" role="img" aria-label="Decision tree">
+              {[
+                { l: 'Design', s: cp.split(' ')[0] },
+                ...D.map(d => ({ l: d.label.split(' ').slice(0, 2).join(' '), s: d.choice.slice(0, 22) })),
+                { l: 'Outcome', s: sc.verdict.split(' ')[1] || sc.verdict }
+              ].map((n, i, a) => {
+                const step = 520 / Math.max(1, a.length - 1);
+                const x = 20 + i * step;
+                return (
+                  <g key={i}>
+                    {i > 0 && <line x1={x - step + 34} y1="38" x2={x - 34} y2="38" stroke="#46e0ff" strokeWidth="1.5" strokeDasharray="4 3" className="flow" />}
+                    <circle cx={x} cy="38" r="9" fill={i === a.length - 1 ? (S.outcome === 'failure' ? '#ff4a5a' : '#5cf2b0') : '#46e0ff'} style={{ animation: `pop .5s ${i * 0.3}s both` }} />
+                    <text x={x} y="64" textAnchor="middle" fill="#e8f2fc" fontSize="10" fontFamily="Chakra Petch" fontWeight="600">{n.l}</text>
+                    <text x={x} y="78" textAnchor="middle" fill="#8da6c2" fontSize="8.5" fontFamily="JetBrains Mono">{n.s}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
         </div>
       </div>
-    </div>
+      <div className="row between rise" style={ri(5)}>
+        <div className="row gap">
+          <Btn k="secondary" icon="refresh" onClick={retry}>Retry · new design</Btn>
+          <Btn k="secondary" icon="back" onClick={restart}>Restart</Btn>
+        </div>
+        <Btn glow icon="search" onClick={() => go(20)}>Data center</Btn>
+      </div>
+    </section>
   );
-};
+}
 
-// ============================================================================
-// 12. SCREEN: LEADERBOARD & RECORDS
-// ============================================================================
-const ScreenLeaderboard: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  let records: any[] = [];
-  try {
-    records = JSON.parse(localStorage.getItem('last_light_records') || '[]');
-  } catch {
-    records = [];
-  }
+/* 20 NASA DATA */
+const DB = [
+  { t: 'ASTERIA-1', tag: 'GAME OBJECT', b: 'A fictional C-type asteroid invented for this game. Its size, spin and orbit are not measurements of any real body.', x: 'Game model: 412 m diameter, 7.2 h spin, 0.06 albedo.' },
+  { t: 'Delta-V budget', tag: 'CONCEPT', b: 'Delta-V is the total change in velocity a spacecraft can make. The rocket equation links it to exhaust speed and the ratio of full to empty mass.', x: 'Game model: ΔV = Isp × 9.81 × ln(wet mass ÷ dry mass).' },
+  { t: 'Electric propulsion', tag: 'CONCEPT', b: 'Ion and Hall thrusters accelerate charged propellant. They use little fuel but push gently, so trips take longer.', x: 'Game model: Hall 520 s, Ion 700 s, chemical 310 s, with matching cruise speeds.' },
+  { t: 'Thermal control', tag: 'CONCEPT', b: 'Spacecraft must shed the heat their electronics and instruments make. Radiators and heat pipes move heat to space.', x: 'Game model: thermal load rises with science, computing and comms power and falls with thermal power.' },
+  { t: 'Deep space communications', tag: 'CONCEPT', b: 'Distant probes talk to large ground antennas. Higher-gain dishes narrow the beam and raise the data rate, but need accurate pointing.', x: 'Game model: signal quality from comms power, antenna gain and repointing.' },
+  { t: 'Rendezvous and docking', tag: 'CONCEPT', b: 'Meeting another body means matching its position and velocity. Small thruster pulses correct drift in each axis.', x: 'Game model: lateral and closing speed tolerances of 0.8 and 2.5 m/s.' }
+];
+
+function P20() {
+  const { go, restart } = useG();
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState<string | null>(DB[0].t);
+  const [ld, setLd] = useState(RM ? 100 : 0);
+
+  useEffect(() => {
+    if (RM) return;
+    let v = 0;
+    const iv = setInterval(() => {
+      v += 8;
+      setLd(Math.min(100, v));
+      if (v >= 100) clearInterval(iv);
+    }, 60);
+    return () => clearInterval(iv);
+  }, []);
+
+  const items = DB.filter(d => (d.t + d.b + d.tag).toLowerCase().includes(q.toLowerCase()));
 
   return (
-    <div className="flex h-full flex-col justify-between p-5 pt-6 pb-8">
-      <div>
-        <div className="text-xl font-bold text-white mb-1">Flight Records</div>
-        <p className="text-xs text-[#AAB4C3] mb-4">
-          Historical spaceflight mission logs persisted in local storage.
-        </p>
-
-        <div className="space-y-2 overflow-y-auto max-h-96 no-scrollbar">
-          {records.length > 0 ? (
-            records.map((r, i) => (
-              <div key={i} className="card mono text-xs flex justify-between items-center p-2.5">
-                <div>
-                  <b className="text-white">#{i + 1} · {r.date}</b>
-                  <div className="text-[10px] text-[#6F7B8C]">
-                    Sci: {r.sci} · Data: {r.data}GB · HP: {r.health}%
+    <section className="page" aria-label="Data center">
+      <PHead n={20} title="DATA CENTER" sub="Background on the ideas behind the game." right={<div className="banner" style={{ fontSize: 13 }}>SIMULATED / GAME DATA</div>} />
+      <div className="row gap20 grow" style={{ alignItems: 'stretch', minHeight: 0 }}>
+        <div className="col gap grow" style={{ minHeight: 0 }}>
+          <div style={{ position: 'relative' }} className="rise">
+            <span style={{ position: 'absolute', left: 14, top: 14, color: 'var(--mute)' }}><Ic n="search" s={20} /></span>
+            <input id="dbq" className="input" value={q} onChange={e => setQ(e.target.value)} placeholder="Search the database" aria-label="Search the database" />
+          </div>
+          {ld < 100 && <Meter label="Loading database" v={ld} unit="%" />}
+          <div className="col gap8 scroll grow" style={{ minHeight: 0 }}>
+            {ld >= 100 &&
+              items.map((d, i) => (
+                <div key={d.t} className={'acc rise ' + (open === d.t ? 'open' : '')} style={ri(i)}>
+                  <button type="button" className="hd" aria-expanded={open === d.t} onClick={() => setOpen(open === d.t ? null : d.t)}>
+                    <span>
+                      {d.t.toUpperCase()} <span className="pill dim" style={{ marginLeft: 8 }}>{d.tag}</span>
+                    </span>
+                    <span className="chev"><Ic n="chev" s={18} /></span>
+                  </button>
+                  <div className="bd">
+                    <div>
+                      <p>{d.b}</p>
+                      <p className="cy mono" style={{ fontSize: 12 }}>{d.x}</p>
+                    </div>
                   </div>
                 </div>
-                <b className="text-[#00E5FF] text-sm">{r.score} PTS</b>
-              </div>
-            ))
-          ) : (
-            <div className="card text-center text-xs text-[#6F7B8C] py-8">
-              No saved flight records yet. Complete a flight to log your mission!
-            </div>
-          )}
+              ))}
+            {ld >= 100 && items.length === 0 && <div className="dim mono">No entries match “{q}”.</div>}
+          </div>
+        </div>
+        <div className="col gap" style={{ width: 380 }}>
+          <div className="panel rise" style={ri(2)}>
+            <div className="lab">Rocket equation (game model)</div>
+            <svg viewBox="0 0 340 170" width="100%" role="img" aria-label="Delta-V versus mass ratio">
+              <g stroke="#1f3856">
+                <line x1="30" x2="330" y1="150" y2="150" />
+                <line x1="30" x2="30" y1="10" y2="150" />
+              </g>
+              <path
+                d={Array.from({ length: 30 }, (_, i) => {
+                  const r = 1 + (i / 29) * 2;
+                  return `${i ? 'L' : 'M'}${30 + ((r - 1) / 2) * 300},${150 - (Math.log(r) / Math.log(3)) * 130}`;
+                }).join(' ')}
+                fill="none"
+                stroke="#46e0ff"
+                strokeWidth="2.5"
+                pathLength={1}
+                strokeDasharray="1"
+                style={{ strokeDashoffset: 1, animation: 'drawline 1.8s var(--ease) forwards' }}
+              />
+              <text x="180" y="166" fill="#8da6c2" fontSize="9" textAnchor="middle" fontFamily="JetBrains Mono">WET ÷ DRY MASS</text>
+              <text x="34" y="20" fill="#8da6c2" fontSize="9" fontFamily="JetBrains Mono">ΔV</text>
+            </svg>
+          </div>
+          <div className="panel col gap8 rise" style={ri(3)}>
+            <div className="lab">Real-world sources</div>
+            <div className="dim" style={{ fontSize: 13 }}>Nothing in this game is real NASA data. For actual missions and small-body data, visit:</div>
+            <a href="https://ssd.jpl.nasa.gov/" target="_blank" rel="noopener noreferrer" className="cy mono" style={{ fontSize: 12 }}>JPL Solar System Dynamics</a>
+            <a href="https://science.nasa.gov/" target="_blank" rel="noopener noreferrer" className="cy mono" style={{ fontSize: 12 }}>NASA Science</a>
+          </div>
         </div>
       </div>
-
-      <button
-        type="button"
-        className="btn cursor-pointer mt-4"
-        onClick={onBack}
-      >
-        BACK TO MAIN MENU
-      </button>
-    </div>
+      <div className="row between rise" style={ri(4)}>
+        <Btn k="secondary" icon="back" onClick={() => go(19)}>Back to debrief</Btn>
+        <Btn glow icon="refresh" onClick={restart}>New mission</Btn>
+      </div>
+    </section>
   );
+}
+
+// ============================================================================
+// APP SHELL, HUD, TRANSITIONS
+// ============================================================================
+
+const PAGES: Record<number, React.FC> = {
+  1: P1, 2: P2, 3: P3, 4: P4, 5: P5, 6: P6, 7: P7, 8: P8, 9: P9, 10: P10,
+  11: P11, 12: P12, 13: P13, 14: P14, 15: P15, 16: P16, 17: P17, 18: P18, 19: P19, 20: P20
 };
 
-// ============================================================================
-// 13. SCREEN: NASA SCIENCE DOSSIER
-// ============================================================================
-const ScreenNasaDossier: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const [openCard, setOpenCard] = useState<number | null>(null);
+const KIND: Record<string, string> = {
+  '1>3': 'zoom',
+  '3>4': 'slide',
+  '5>6': 'eng',
+  '6>7': 'launch',
+  '11>12': 'rdv',
+  '18>19': 'data'
+};
 
-  const articles = [
-    {
-      title: 'Tsiolkovsky Rocket Equation',
-      desc: 'Δv = Isp · g₀ · ln(m₀ / m_f)\nGoverns the fundamental velocity change achievable by chemical and ion propulsion systems given propellant mass fraction.',
-    },
-    {
-      title: 'Solar Inverse-Square Law',
-      desc: 'P = P₀ · (1 AU / r)²\nSolar flux drops rapidly as distance from the Sun increases. At 1.25 AU, solar panels generate ~64% of their Earth-orbit nominal power.',
-    },
-    {
-      title: 'Shannon-Hartley Comms Theorem',
-      desc: 'C = B · log₂(1 + S/N)\nDeep space data throughput is limited by antenna gain, transmitting power, and distance attenuation over interplanetary ranges.',
-    },
-    {
-      title: 'Deep Space Network (DSN)',
-      desc: 'NASA ground tracking antennas located 120° apart at Goldstone (USA), Madrid (Spain), and Canberra (Australia) maintain continuous line-of-sight communications.',
-    },
-    {
-      title: 'Asteroid 101955 Bennu (OSIRIS-REx)',
-      desc: 'Primordial B-type carbonaceous near-Earth asteroid. Microgravity rubble-pile composition with active particle plume ejections.',
-    },
-  ];
+const DUR: Record<string, number> = {
+  zoom: 1100,
+  slide: 600,
+  eng: 900,
+  launch: 1000,
+  rdv: 1100,
+  data: 900,
+  fade: 450
+};
+
+function enter(s: GameState, p: number): Partial<GameState> {
+  const o: Partial<GameState> = {};
+  if (p === 11 && !s.apInit) {
+    o.apInit = true;
+    o.range = 1800;
+    o.vel = 90;
+  }
+  if (p === 17) {
+    o.crisisLeft = 20;
+    o.crisisPick = null;
+  }
+  if (p >= 3) {
+    o.timeline = [...s.timeline, { p, met: s.met, health: Math.round(s.health), fuel: Math.round(s.fuel), banked: Math.round(s.banked) }];
+  }
+  return o;
+}
+
+const Hud = memo(function Hud({
+  S,
+  hc,
+  setHc,
+  audioMuted,
+  toggleMute
+}: {
+  S: GameState;
+  hc: boolean;
+  setHc: React.Dispatch<React.SetStateAction<boolean>>;
+  audioMuted: boolean;
+  toggleMute: () => void;
+}) {
+  const h = S.health;
+  const fu = S.fuel;
+  const clock = `${pad(Math.floor(S.met / 3600))}:${pad((S.met / 60) % 60)}:${pad(S.met % 60)}`;
 
   return (
-    <div className="flex h-full flex-col justify-between p-5 pt-6 pb-8 overflow-y-auto no-scrollbar">
+    <header className={'hud ' + (S.page < 3 ? 'dim' : '')}>
       <div>
-        <div className="text-xl font-bold text-white mb-1">NASA Science Dossier</div>
-        <p className="text-xs text-[#AAB4C3] mb-4">
-          Real aerospace physics and astrodynamics formulas utilized by the simulation engine.
-        </p>
-
-        <div className="space-y-2">
-          {articles.map((art, i) => (
-            <div
-              key={art.title}
-              className="card cursor-pointer transition-colors"
-              onClick={() => {
-                playTelemetryClick();
-                setOpenCard(openCard === i ? null : i);
-              }}
-            >
-              <div className="flex justify-between items-center text-xs font-bold text-white">
-                <span>{art.title}</span>
-                <span className="mono text-[#00E5FF]">{openCard === i ? '−' : '+'}</span>
-              </div>
-              {openCard === i && (
-                <pre className="mono mt-2 text-[11px] text-[#AAB4C3] whitespace-pre-wrap pt-2 border-t border-[#293342]/60">
-                  {art.desc}
-                </pre>
-              )}
-            </div>
-          ))}
+        <div className="h-mis">MISSION: LAST LIGHT</div>
+        <div className="h-ph">
+          PHASE: <b>{PH[S.page]}</b>
         </div>
       </div>
-
-      <button
-        type="button"
-        className="btn cursor-pointer mt-4"
-        onClick={onBack}
-      >
-        BACK
-      </button>
-    </div>
+      <div className="h-c" aria-label="Mission elapsed time">
+        T+ {clock}
+      </div>
+      <div className="h-r">
+        <div className={'stat ' + lvl(h, 50, 25, true)}>
+          <small>HEALTH</small>
+          <span className="num"><Num v={h} d={0} />%</span>
+        </div>
+        <div className={'stat ' + lvl(fu, 25, 12, true)}>
+          <small>FUEL</small>
+          <span className="num"><Num v={fu} d={0} />%</span>
+        </div>
+        <div className={'stat ' + lvl(S.dataQueue + S.txBuffer, S.maxDataStorage * 0.75, S.maxDataStorage * 0.95)}>
+          <small>DATA</small>
+          <span className="num"><Num v={S.dataQueue + S.txBuffer} d={1} /> GB</span>
+        </div>
+        <button
+          type="button"
+          className="hc-btn"
+          aria-pressed={audioMuted}
+          aria-label={audioMuted ? 'Unmute Audio' : 'Mute Audio'}
+          onClick={toggleMute}
+          title={audioMuted ? 'Unmute Audio' : 'Mute Audio'}
+        >
+          <Ic n={audioMuted ? 'mute' : 'sound'} s={18} />
+        </button>
+        <button
+          type="button"
+          className="hc-btn"
+          aria-pressed={hc}
+          aria-label="High contrast mode"
+          onClick={() => setHc(prev => !prev)}
+        >
+          HC
+        </button>
+      </div>
+    </header>
   );
-};
+});
 
-// ============================================================================
-// MODAL & SHEET COMPONENTS
-// ============================================================================
-const Sheet: React.FC<{ children: React.ReactNode; onClose: () => void }> = ({
-  children,
-  onClose,
-}) => (
-  <div className="sheet">
-    <div
-      className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-[#293342] hover:bg-[#00E5FF] cursor-pointer transition-colors"
-      onClick={onClose}
-    />
-    {children}
-  </div>
-);
+export function App() {
+  const [S, setS] = useState<GameState>(() => initState());
+  const ref = useRef(S);
+  ref.current = S;
+  const [view, setView] = useState<{ cur: number; prev: number | null; kind: string }>({ cur: 1, prev: null, kind: 'fade' });
+  const [hc, setHc] = useState(false);
+  const [audioMuted, setMuted] = useState(isAudioMuted());
+  const [sc, setSc] = useState(1);
+  const fit = useRef<HTMLDivElement | null>(null);
 
-const ProgressBar: React.FC<{ label: string; value: number; color?: string }> = ({
-  label,
-  value,
-  color = '#00E5FF',
-}) => (
-  <div className="mb-2">
-    <div className="flex justify-between text-xs text-[#AAB4C3] mono mb-1">
-      <span>{label}</span>
-      <span>{Math.round(value)}%</span>
-    </div>
-    <div className="h-2 rounded bg-[#0D111A]">
-      <div
-        style={{
-          width: `${Math.max(0, Math.min(100, value))}%`,
-          background: color,
-          transition: 'width .4s ease-out',
-        }}
-        className="h-2 rounded"
-      />
-    </div>
-  </div>
-);
+  const toggleMute = useCallback(() => {
+    const next = toggleAudio();
+    setMuted(next);
+  }, []);
 
-const ComponentCompareSheet: React.FC<{
-  subIndex: number;
-  candidateIndex: number;
-  installedIndex: number;
-  onInstall: () => void;
-  onClose: () => void;
-}> = ({ subIndex, candidateIndex, installedIndex, onInstall, onClose }) => {
-  const sub = SUBSYSTEMS[subIndex];
-  const cand = sub.options[candidateIndex];
-  const inst = sub.options[installedIndex];
+  useEffect(() => {
+    const el = fit.current;
+    if (!el) return;
+    const f = () => setSc(clamp(Math.min(el.clientWidth / 1280, el.clientHeight / 720), 0.2, 1.5));
+    f();
+    const ro = new ResizeObserver(f);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const up = useCallback((f: Partial<GameState> | ((prev: GameState) => Partial<GameState>)) => {
+    setS(s => ({ ...s, ...(typeof f === 'function' ? f(s) : f) }));
+  }, []);
+
+  const swap = useCallback((p: number, kind: string) => {
+    const prev = ref.current.page;
+    const dur = RM ? 40 : DUR[kind] || 450;
+    setView({ cur: p, prev: prev === p ? null : prev, kind });
+    if (kind === 'zoom' || kind === 'rdv') {
+      WARP.t = RM ? 1 : 18;
+      setTimeout(() => {
+        WARP.t = 1;
+      }, dur * 0.8);
+    }
+    setTimeout(() => setView(v => (v.cur === p ? { ...v, prev: null } : v)), dur + 40);
+  }, []);
+
+  const go = useCallback(
+    (p: number) => {
+      const s = ref.current;
+      if (p === s.page) return;
+      swap(p, KIND[`${s.page}>${p}`] || 'fade');
+      setS(q => ({ ...q, ...enter(q, p), page: p, prevPage: q.page }));
+    },
+    [swap]
+  );
+
+  const restart = useCallback(() => {
+    swap(1, 'fade');
+    setS(initState());
+  }, [swap]);
+
+  const retry = useCallback(() => {
+    swap(5, 'fade');
+    setS({ ...initState(ref.current), page: 5 });
+  }, [swap]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) up(s => tick(s, 0.25));
+    }, 250);
+    return () => clearInterval(id);
+  }, [up]);
+
+  useEffect(() => {
+    if (S.health <= 0 && S.page >= 7 && S.page < 18 && S.page !== 17) {
+      go(18);
+    }
+  }, [S.health, S.page, go]);
+
+  const ctx = useMemo(() => ({ S, up, go, restart, retry, audioMuted, toggleMute }), [S, up, go, restart, retry, audioMuted, toggleMute]);
+
+  const CurrentPage = PAGES[view.cur] || P1;
+  const PreviousPage = view.prev != null ? PAGES[view.prev] : null;
+
+  const crit = S.page === 17 && S.crisisPick == null;
 
   return (
-    <Sheet onClose={onClose}>
-      <div className="text-sm font-bold text-white mb-2">COMPARE · {sub.name}</div>
-      <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-        <div className="card p-2 border-[#00E5FF]">
-          <span className="text-[10px] mono text-[#00E5FF] block">CURRENT</span>
-          <b className="text-white text-xs block mb-1">{inst.name}</b>
-          <div className="mono text-[10px] space-y-0.5 text-[#AAB4C3]">
-            <div>Mass: {inst.mass}kg</div>
-            <div>Power: {inst.power}W</div>
-            <div>Cost: ${inst.cost}M</div>
-            <div>Δv: {inst.dv}m/s</div>
+    <Ctx.Provider value={ctx}>
+      <div className="vp">
+        <div className="fit" ref={fit}>
+          <div className="frame" style={{ width: 1280 * sc, height: 720 * sc }}>
+            <div className={'stage ' + (hc ? 'hc' : '')} style={{ transform: `scale(${sc})` }} role="application" aria-label="Mission: Last Light">
+              <div className="bg" />
+              <Starfield sc={sc} />
+              <div className="layer">
+                {PreviousPage && (
+                  <div key={'pg' + view.prev} className={'pg-wrap out-' + view.kind}>
+                    <PreviousPage />
+                  </div>
+                )}
+                <div key={'pg' + view.cur} className={'pg-wrap ' + (view.prev != null ? 'in-' + view.kind : '')}>
+                  <CurrentPage />
+                </div>
+              </div>
+              {crit && <div className="crit-vignette" />}
+              <Hud S={S} hc={hc} setHc={setHc} audioMuted={audioMuted} toggleMute={toggleMute} />
+              {view.prev != null && <div key={'fx' + view.cur} className={'fx ' + view.kind} />}
+              <div className="rail" aria-hidden="true">
+                {Array.from({ length: 20 }).map((_, i) => (
+                  <i key={i} className={i + 1 < S.page ? 'done' : i + 1 === S.page ? 'cur' : ''} />
+                ))}
+              </div>
+              <div className="scan-lines" />
+            </div>
           </div>
         </div>
-
-        <div className="card p-2 border-[#293342]">
-          <span className="text-[10px] mono text-[#FFAB00] block">CANDIDATE</span>
-          <b className="text-white text-xs block mb-1">{cand.name}</b>
-          <div className="mono text-[10px] space-y-0.5 text-[#AAB4C3]">
-            <div>Mass: {cand.mass}kg</div>
-            <div>Power: {cand.power}W</div>
-            <div>Cost: ${cand.cost}M</div>
-            <div>Δv: {cand.dv}m/s</div>
-          </div>
-        </div>
+        <div className="rotate-hint">Rotate your device to landscape for the best view.</div>
       </div>
-
-      <div className="grid gap-2">
-        <button
-          type="button"
-          className="btn p min-h-[40px] text-xs cursor-pointer"
-          onClick={onInstall}
-        >
-          INSTALL CANDIDATE ({cand.name})
-        </button>
-        <button
-          type="button"
-          className="btn min-h-[40px] text-xs cursor-pointer"
-          onClick={onClose}
-        >
-          CANCEL
-        </button>
-      </div>
-    </Sheet>
+    </Ctx.Provider>
   );
-};
-
-const CrisisTriageModal: React.FC<{
-  crisis: InFlightCrisis;
-  onResolve: (action: 'safe' | 'counter' | 'push') => void;
-}> = ({ crisis, onResolve }) => (
-  <div className="absolute inset-0 z-40 flex items-end bg-black/80 backdrop-blur-sm">
-    <div
-      className="sheet border-[#FF1744] border-2"
-      style={{ animation: 'sheetUp .3s ease-out' }}
-    >
-      <div className="mono mb-1 text-center font-bold text-sm text-[#FF1744] animate-pulse">
-        {crisis.title}
-      </div>
-      <p className="mb-3 text-center text-xs text-[#AAB4C3]">{crisis.desc}</p>
-
-      <div className="space-y-2">
-        {crisis.options.map((opt) => (
-          <button
-            key={opt.action}
-            type="button"
-            className="card w-full text-left p-2.5 cursor-pointer hover:border-[#00E5FF] transition-colors"
-            onClick={() => onResolve(opt.action)}
-          >
-            <b className="text-white text-xs block mb-0.5">{opt.label}</b>
-            <span className="text-[10px] text-[#AAB4C3]">{opt.desc}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  </div>
-);
-
-// ============================================================================
-// SVG ASSETS: SPACECRAFT & ASTEROID
-// ============================================================================
-const SpacecraftSvg: React.FC<{
-  s?: number;
-  onPin?: (idx: number) => void;
-  activeTab?: number;
-}> = ({ s = 1, onPin, activeTab }) => (
-  <svg viewBox="0 0 300 200" width="100%" height="100%" className="overflow-visible select-none">
-    <g transform={`translate(150 100) scale(${s})`}>
-      {/* Solar Wings */}
-      <rect x="-110" y="-18" width="70" height="36" fill="#0b3b55" stroke="#00E5FF" rx="2" />
-      <line x1="-75" y1="-18" x2="-75" y2="18" stroke="#00E5FF" opacity="0.4" />
-      <rect x="40" y="-18" width="70" height="36" fill="#0b3b55" stroke="#00E5FF" rx="2" />
-      <line x1="75" y1="-18" x2="75" y2="18" stroke="#00E5FF" opacity="0.4" />
-
-      {/* Main Bus Frame */}
-      <rect x="-38" y="-30" width="76" height="60" rx="8" fill="#1d2636" stroke="#AAB4C3" />
-
-      {/* High-gain Dish */}
-      <circle cx="0" cy="-42" r="9" fill="none" stroke="#00E5FF" strokeWidth="1.5" />
-      <line x1="0" y1="-33" x2="0" y2="-30" stroke="#00E5FF" strokeWidth="2" />
-
-      {/* Thruster Nozzle */}
-      <rect x="-10" y="30" width="20" height="14" fill="#FFAB00" rx="2" />
-
-      {/* Subsystem interactive pins (8 subsystems) */}
-      {[
-        [-70, 0, 2], // 2: Power (Solar)
-        [0, -42, 3],  // 3: Comms (Dish)
-        [0, 37, 1],   // 1: Propulsion (Thruster)
-        [-25, 0, 0],  // 0: Structure (Truss)
-        [25, 0, 4],   // 4: Science (Sensor)
-        [70, 0, 5],   // 5: Thermal (Radiator)
-        [0, 10, 6],   // 6: Navigation (Star tracker)
-        [15, -18, 7], // 7: Computing (Flight CPU)
-      ].map(([x, y, i]) => (
-        <g
-          key={i}
-          className="cursor-pointer"
-          onClick={() => {
-            playTelemetryClick();
-            if (onPin) onPin(i);
-          }}
-        >
-          <circle
-            cx={x}
-            cy={y}
-            r={activeTab === i ? 10 : 8}
-            fill={activeTab === i ? '#00E5FF' : '#00E5FF'}
-            opacity={activeTab === i ? 0.5 : 0.25}
-          >
-            <animate attributeName="r" values="6;12;6" dur="2.2s" repeatCount="indefinite" />
-          </circle>
-          <circle cx={x} cy={y} r="4.5" fill={activeTab === i ? '#FFAB00' : '#00E5FF'} />
-        </g>
-      ))}
-    </g>
-  </svg>
-);
-
-const AsteroidSvg: React.FC<{ rot: number; size?: number }> = ({ rot, size = 70 }) => (
-  <svg viewBox="-100 -100 200 200" width={size * 2} height={size * 2} className="select-none overflow-visible">
-    <defs>
-      <radialGradient id="astGrad" cx="30%" cy="30%" r="70%">
-        <stop offset="0%" stopColor="#414b5d" />
-        <stop offset="60%" stopColor="#222834" />
-        <stop offset="100%" stopColor="#0d111a" />
-      </radialGradient>
-      <filter id="astGlow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#00E5FF" floodOpacity="0.25" />
-      </filter>
-    </defs>
-    <circle r="80" fill="url(#astGrad)" stroke="#00E5FF" strokeWidth="1.5" strokeDasharray="5 3" filter="url(#astGlow)" />
-    {[0, 1, 2, 3, 4].map((i) => {
-      const a = i * 1.3 + rot;
-      const cosA = Math.cos(a);
-      if (cosA <= 0) return null;
-      return (
-        <ellipse
-          key={i}
-          cx={Math.sin(a) * 55}
-          cy={(i - 2) * 18}
-          rx={Math.max(2, 14 * cosA + 2)}
-          ry={12}
-          fill="#161b24"
-          stroke="#293342"
-          strokeWidth="1"
-        />
-      );
-    })}
-  </svg>
-);
+}
 
 export default App;
