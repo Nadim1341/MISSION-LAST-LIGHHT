@@ -24,13 +24,13 @@ export const BudgetTriangleView: React.FC<TriangleProps> = ({ coordinates }) => 
   const markerY = wSci * topY + wSurv * leftY + wAff * rightY;
 
   return (
-    <div className="glass-panel rounded-xl p-4 flex flex-col gap-2">
-      <div className="flex items-center justify-between border-b border-cyan-500/20 pb-1.5">
+    <div className="mission-panel p-3.5 flex flex-col gap-2 border border-[#293342]">
+      <div className="flex items-center justify-between border-b border-[#293342] pb-1.5">
         <h3 className="text-xs font-heading font-semibold text-white uppercase tracking-wider">
-          Mission Strategy Triangle
+          Strategy Philosophy
         </h3>
-        <span className="text-[10px] font-mono text-slate-400">
-          PHILOSOPHY BALANCE
+        <span className="text-[10px] font-mono text-[#6F7B8C]">
+          3-AXIS BALANCE
         </span>
       </div>
 

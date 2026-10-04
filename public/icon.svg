@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#080B12"/>
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#00E5FF" stroke-width="4" opacity="0.3"/>
+  <circle cx="256" cy="256" r="160" fill="#0D111A" stroke="#293342" stroke-width="6"/>
+  <!-- Spacecraft body -->
+  <rect x="206" y="216" width="100" height="80" rx="12" fill="#1D2636" stroke="#AAB4C3" stroke-width="4"/>
+  <!-- Solar arrays -->
+  <rect x="76" y="236" width="100" height="40" rx="4" fill="#0B3B55" stroke="#00E5FF" stroke-width="4"/>
+  <rect x="336" y="236" width="100" height="40" rx="4" fill="#0B3B55" stroke="#00E5FF" stroke-width="4"/>
+  <!-- Dish -->
+  <circle cx="256" cy="190" r="16" fill="none" stroke="#00E5FF" stroke-width="4"/>
+  <!-- Thruster -->
+  <rect x="242" y="296" width="28" height="18" fill="#FFAB00" rx="2"/>
+  <!-- Sensor beacon -->
+  <circle cx="256" cy="256" r="8" fill="#00E5FF"/>
+</svg>

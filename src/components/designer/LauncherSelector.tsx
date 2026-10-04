@@ -24,18 +24,18 @@ export const LauncherSelector: React.FC<LauncherSelectorProps> = ({
   );
 
   return (
-    <div className="glass-panel rounded-xl p-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2">
-        <h3 className="text-sm font-heading font-semibold text-white tracking-wide uppercase flex items-center gap-2">
-          <Rocket className="w-4 h-4 text-cyan-400" />
+    <div className="mission-panel p-3.5 flex flex-col gap-2.5 border border-[#293342]">
+      <div className="flex items-center justify-between border-b border-[#293342] pb-2">
+        <h3 className="text-xs font-heading font-semibold text-white tracking-wide uppercase flex items-center gap-2">
+          <Rocket className="w-3.5 h-3.5 text-sky-400" />
           Launch Vehicle Selection
         </h3>
-        <span className="text-[11px] font-mono text-cyan-300">
+        <span className="text-[10px] font-mono text-sky-300">
           TARGET C3: {targetC3} km²/s²
         </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2.5">
         {allowedLaunchers.map((launcher) => {
           const capacityKg = calculateLauncherCapacityAtC3(launcher, targetC3);
           const isSelected = selectedLauncher.id === launcher.id;
@@ -45,15 +45,15 @@ export const LauncherSelector: React.FC<LauncherSelectorProps> = ({
             <div
               key={launcher.id}
               onClick={() => onSelectLauncher(launcher)}
-              className={`cursor-pointer rounded-xl p-3 border transition-all relative ${
+              className={`cursor-pointer rounded-lg p-2.5 border transition-all relative ${
                 isSelected
-                  ? 'bg-slate-900 border-cyan-400 ring-2 ring-cyan-500/30'
-                  : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                  ? 'bg-[#1B2330] border-sky-400 ring-1 ring-sky-500/30'
+                  : 'bg-[#0D111A] border-[#293342] hover:border-[#37465B] hover:bg-[#151B26]'
               }`}
             >
               {isSelected && (
-                <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center">
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-sky-500 text-[#080B12] flex items-center justify-center">
+                  <Check className="w-3 h-3 stroke-[3]" />
                 </div>
               )}
 

@@ -69,22 +69,22 @@ export const DebriefView: React.FC<DebriefViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-space-950 text-slate-100 flex flex-col p-6 max-w-6xl mx-auto w-full">
+    <div className="min-h-screen bg-[#080B12] text-[#F3F6FA] flex flex-col p-6 max-w-6xl mx-auto w-full">
       {/* Top Banner */}
-      <div className="flex items-center justify-between pb-4 mb-6 border-b border-cyan-500/25">
+      <div className="flex items-center justify-between pb-4 mb-6 border-b border-[#293342]">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-space-850 text-sky-300 border border-[#293342]">
               POST-FLIGHT MISSION DEBRIEF
             </span>
-            <span className="text-xs font-mono text-slate-400">
+            <span className="text-xs font-mono text-[#6F7B8C]">
               NASA Planetary Science Division Evaluation
             </span>
           </div>
           <h1 className="text-2xl font-heading font-bold text-white tracking-wide">
             MISSION: LAST LIGHT — {scenario.title}
           </h1>
-          <p className="text-xs text-slate-400 font-mono mt-0.5">
+          <p className="text-xs text-[#AAB4C3] font-mono mt-0.5">
             Spacecraft: {design.name} | Launch Vehicle: {launcher.name} | Target: {scenario.target.name}
           </p>
         </div>
@@ -92,7 +92,7 @@ export const DebriefView: React.FC<DebriefViewProps> = ({
         <button
           type="button"
           onClick={handleRestart}
-          className="px-5 py-2.5 rounded-xl font-mono text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white flex items-center gap-2 shadow-lg shadow-cyan-950/50 transition-all active:scale-95"
+          className="px-5 py-2.5 rounded-lg font-mono text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white flex items-center gap-2 shadow-md shadow-sky-950/50 transition-all active:scale-95 cursor-pointer"
         >
           <RotateCcw className="w-4 h-4" />
           <span>[REDESIGN & FLY AGAIN]</span>
@@ -100,13 +100,13 @@ export const DebriefView: React.FC<DebriefViewProps> = ({
       </div>
 
       {/* Outcome Scorecard Banner */}
-      <div className={`hud-corner rounded-2xl p-6 border mb-6 flex items-center justify-between shadow-2xl ${rankColor}`}>
+      <div className={`mission-panel p-6 border mb-6 flex items-center justify-between shadow-xl ${rankColor}`}>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             {isSuccess ? (
               <Trophy className="w-6 h-6 text-emerald-400" />
             ) : isPartial ? (
-              <ShieldCheck className="w-6 h-6 text-cyan-400" />
+              <ShieldCheck className="w-6 h-6 text-sky-400" />
             ) : (
               <AlertTriangle className="w-6 h-6 text-red-400" />
             )}
@@ -114,7 +114,7 @@ export const DebriefView: React.FC<DebriefViewProps> = ({
               {report.outcomeTitle}
             </h2>
           </div>
-          <p className="text-xs text-slate-200 max-w-2xl leading-relaxed font-sans">
+          <p className="text-xs text-[#AAB4C3] max-w-2xl leading-relaxed font-sans">
             {report.outcomeSummary}
           </p>
           <span className="inline-block text-xs font-mono font-bold tracking-wider pt-1">
@@ -123,20 +123,20 @@ export const DebriefView: React.FC<DebriefViewProps> = ({
         </div>
 
         <div className="text-right">
-          <span className="text-xs font-mono text-slate-400 uppercase tracking-wider block">
+          <span className="text-xs font-mono text-[#6F7B8C] uppercase tracking-wider block">
             Composite Mission Score
           </span>
-          <span className="text-4xl font-heading font-extrabold text-white text-glow-cyan">
+          <span className="text-4xl font-heading font-extrabold text-white">
             {report.compositeScore}
           </span>
-          <span className="text-xs font-mono text-slate-400 block">/ 1000 MAX PTS</span>
+          <span className="text-xs font-mono text-[#6F7B8C] block">/ 1000 MAX PTS</span>
         </div>
       </div>
 
       {/* 8-Axis Evaluation Grid */}
-      <div className="glass-panel hud-corner rounded-2xl p-5 mb-6 shadow-2xl">
+      <div className="mission-panel p-5 mb-6 shadow-xl border border-[#293342]">
         <h3 className="text-xs font-heading font-semibold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-cyan-400" />
+          <BarChart3 className="w-4 h-4 text-sky-400" />
           8-Axis Mission Performance Breakdown
         </h3>
 
@@ -178,12 +178,12 @@ export const DebriefView: React.FC<DebriefViewProps> = ({
       </div>
 
       {/* Root-Cause Causal Analysis */}
-      <div className="glass-panel hud-corner rounded-2xl p-5 mb-6 shadow-2xl">
+      <div className="mission-panel p-5 mb-6 shadow-xl border border-[#293342]">
         <h3 className="text-xs font-heading font-semibold text-white uppercase tracking-wider mb-2 flex items-center gap-2">
           <BookOpen className="w-4 h-4 text-amber-400" />
           Causal Root-Cause Analysis: Why Your Decisions Mattered
         </h3>
-        <p className="text-xs text-slate-400 mb-4 font-mono">
+        <p className="text-xs text-[#6F7B8C] mb-4 font-mono">
           Every component choice, pre-launch stress test decision, and flight triage directive created direct consequences during the mission.
         </p>
 
@@ -201,25 +201,25 @@ export const DebriefView: React.FC<DebriefViewProps> = ({
             return (
               <div
                 key={i}
-                className="bg-slate-900/90 rounded-xl p-4 border border-slate-800 flex flex-col gap-2 font-mono text-xs shadow-md"
+                className="bg-[#0D111A] rounded-lg p-4 border border-[#232D3E] flex flex-col gap-2 font-mono text-xs shadow-md"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] px-2 py-0.5 rounded border uppercase tracking-wider font-semibold ${badgeColor}`}>
                       {factor.severity.replace('_', ' ')}
                     </span>
-                    <span className="text-slate-400">[{factor.subsystem}]</span>
+                    <span className="text-[#6F7B8C]">[{factor.subsystem}]</span>
                   </div>
                   <span className="text-white font-semibold">{factor.playerDecision}</span>
                 </div>
 
-                <p className="text-slate-200 leading-relaxed font-sans text-xs">
-                  <span className="font-semibold text-cyan-300 font-mono">Flight Consequence: </span>
+                <p className="text-[#AAB4C3] leading-relaxed font-sans text-xs">
+                  <span className="font-semibold text-sky-300 font-mono">Flight Consequence: </span>
                   {factor.causalConsequence}
                 </p>
 
-                <p className="text-[11px] text-slate-400 font-sans italic border-t border-slate-800/80 pt-1.5">
-                  <span className="text-slate-500 font-mono not-italic font-semibold">Scientific Context: </span>
+                <p className="text-[11px] text-[#6F7B8C] font-sans italic border-t border-[#293342] pt-1.5">
+                  <span className="text-slate-400 font-mono not-italic font-semibold">Scientific Context: </span>
                   {factor.scientificContext}
                 </p>
               </div>
@@ -229,9 +229,9 @@ export const DebriefView: React.FC<DebriefViewProps> = ({
       </div>
 
       {/* Cinematic Mission Replay Timeline */}
-      <div className="glass-panel hud-corner rounded-2xl p-5 mb-6 shadow-2xl">
+      <div className="mission-panel p-5 mb-6 shadow-xl border border-[#293342]">
         <h3 className="text-xs font-heading font-semibold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-          <ListOrdered className="w-4 h-4 text-cyan-400" />
+          <ListOrdered className="w-4 h-4 text-sky-400" />
           Cinematic Mission Replay Timeline
         </h3>
 

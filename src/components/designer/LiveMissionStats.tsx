@@ -45,15 +45,15 @@ export const LiveMissionStats: React.FC<LiveStatsProps> = ({
   const deltaVRatio = deltaVRequired > 0 ? Math.min(1.5, deltaVAvailable / deltaVRequired) : 1.0;
 
   return (
-    <div className="glass-panel rounded-xl p-4 flex flex-col h-full overflow-hidden">
-      <div className="flex items-center justify-between mb-3 border-b border-cyan-500/20 pb-2">
-        <h2 className="text-sm font-heading font-semibold text-white tracking-wide uppercase flex items-center gap-2">
-          <Activity className="w-4 h-4 text-cyan-400" />
+    <div className="mission-panel p-4 flex flex-col h-full overflow-hidden border border-[#293342]">
+      <div className="flex items-center justify-between mb-3 border-b border-[#293342] pb-2">
+        <h2 className="text-xs font-heading font-semibold text-white tracking-wide uppercase flex items-center gap-2">
+          <Activity className="w-3.5 h-3.5 text-sky-400" />
           Live Mission Telemetry
         </h2>
         <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${isEngineer
-            ? 'bg-amber-950/80 border-amber-500/40 text-amber-300'
-            : 'bg-cyan-950/80 border-cyan-500/40 text-cyan-300'
+            ? 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+            : 'bg-space-850 border-[#293342] text-sky-300'
           }`}>
           {isEngineer ? 'ENGINEER VIEW' : 'COMMANDER VIEW'}
         </span>

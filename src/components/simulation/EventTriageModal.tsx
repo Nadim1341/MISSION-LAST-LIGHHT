@@ -39,9 +39,9 @@ export const EventTriageModal: React.FC<EventTriageModalProps> = ({
     const isCleanMitigation = activeResolution.damagePercent === 0 && activeResolution.scienceLostPoints === 0;
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-        <div className="glass-panel max-w-2xl w-full rounded-2xl p-6 text-slate-100 border border-cyan-500/40 shadow-2xl">
-          <div className="flex items-center gap-3 mb-4 pb-3 border-b border-cyan-500/20">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+        <div className="mission-panel-elevated max-w-2xl w-full p-6 text-txt-primary border border-[#293342] shadow-2xl">
+          <div className="flex items-center gap-3 mb-4 pb-3 border-b border-[#293342]">
             {isFatal ? (
               <div className="w-10 h-10 rounded-xl bg-red-950/80 border border-red-500/50 flex items-center justify-center text-red-400">
                 <AlertTriangle className="w-6 h-6" />
@@ -123,10 +123,10 @@ export const EventTriageModal: React.FC<EventTriageModalProps> = ({
       : 'border-cyan-500 bg-cyan-950/90 text-cyan-300';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-      <div className="glass-panel glass-panel-glow max-w-3xl w-full rounded-2xl p-6 text-slate-100 border border-cyan-500/40 shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-fadeIn overflow-y-auto">
+      <div className="mission-panel-elevated max-w-3xl w-full p-4 sm:p-6 text-txt-primary border border-sky-500/40 shadow-2xl flex flex-col max-h-[90vh] my-auto">
         {/* Header Strip */}
-        <div className="flex items-start justify-between pb-3 mb-3 border-b border-cyan-500/20">
+        <div className="flex items-start justify-between pb-3 mb-3 border-b border-[#293342] shrink-0">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="w-2.5 h-2.5 rounded-full bg-red-400 animate-ping" />
@@ -137,7 +137,7 @@ export const EventTriageModal: React.FC<EventTriageModalProps> = ({
                 MET DAY {telemetry.missionElapsedTimeDays.toFixed(1)}
               </span>
             </div>
-            <h2 className="text-lg font-heading font-bold text-white">
+            <h2 className="text-base sm:text-lg font-heading font-bold text-white">
               {event.title}
             </h2>
             <p className="text-xs text-cyan-300 font-mono mt-0.5">
@@ -147,7 +147,7 @@ export const EventTriageModal: React.FC<EventTriageModalProps> = ({
         </div>
 
         {/* Anomaly Description & Context */}
-        <div className="bg-slate-950/70 rounded-xl p-3.5 border border-slate-800 mb-4">
+        <div className="bg-slate-950/70 rounded-xl p-3 sm:p-3.5 border border-slate-800 mb-3 shrink-0">
           <p className="text-xs text-white font-medium mb-1.5">
             {event.headline}
           </p>
@@ -157,27 +157,31 @@ export const EventTriageModal: React.FC<EventTriageModalProps> = ({
         </div>
 
         {/* Decision Options */}
-        <div className="mb-2">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 block mb-2">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 block mb-2 shrink-0">
             Select Flight Controller Directive:
           </span>
-          <div className="flex flex-col gap-2.5 overflow-y-auto max-h-[38vh] pr-1">
+          <div className="flex flex-col gap-2.5 overflow-y-auto pr-1">
             {event.availableActions.map((action, i) => (
               <div
                 key={i}
-                className="bg-slate-900/90 hover:bg-slate-850 border border-slate-700/80 hover:border-cyan-400/80 rounded-xl p-3.5 transition-all cursor-pointer flex flex-col gap-2"
+                className="bg-slate-900/90 hover:bg-slate-850 active:bg-slate-800 border border-slate-700/80 hover:border-cyan-400/80 rounded-xl p-3 sm:p-3.5 transition-all cursor-pointer flex flex-col gap-2"
                 onClick={() => onSelectAction(action.type)}
               >
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-heading font-bold text-white flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-cyan-950 border border-cyan-500/50 flex items-center justify-center text-[10px] font-mono text-cyan-300">
+                    <span className="w-5 h-5 rounded-full bg-cyan-950 border border-cyan-500/50 flex items-center justify-center text-[10px] font-mono text-cyan-300 font-bold">
                       {i + 1}
                     </span>
                     {action.label}
                   </h4>
                   <button
                     type="button"
-                    className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-mono font-semibold transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectAction(action.type);
+                    }}
+                    className="px-3.5 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white text-[11px] font-mono font-bold tracking-wider transition-all cursor-pointer shadow-md hover:shadow-cyan-500/25"
                   >
                     EXECUTE
                   </button>
